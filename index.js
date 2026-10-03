@@ -1,75 +1,29 @@
-// index.js - Bot principal de Discord
-// Comando /say → Abre un Modal → Bot envía el mensaje
-
+// index.js - Punto de entrada de "La Cripta de los Huesos"
 require('dotenv').config();
-const {
-    Client,
-    GatewayIntentBits,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle,
-    ActionRowBuilder,
-} = require('discord.js');
+const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const { conectarDB } = require('./src/database');
+const { cargarComandos, cargarInteracciones, cargarEventos } = require('./src/loader');
 
-// ─── Crear el cliente del bot ───
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-    ],
-});
+// ─── Que el bot nunca se caiga por un error suelto ───
+process.on('unhandledRejection', (error) => console.error('⚠️ unhandledRejection:', error));
+process.on('uncaughtException', (error) => console.error('⚠️ uncaughtException:', error));
 
-// ─── Evento: Bot listo ───
-client.once('ready', () => {
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`✅ Bot conectado como: ${client.user.tag}`);
-    console.log(`📡 Servidores: ${client.guilds.cache.size}`);
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-});
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+client.commands = new Collection();       // slash commands por nombre
+client.interacciones = new Collection();  // botones/selects/modales por prefijo de customId
 
-// ─── Evento: Interacción recibida ───
-client.on('interactionCreate', async (interaction) => {
-
-    // ── Manejar el slash command /say ──
-    if (interaction.isChatInputCommand() && interaction.commandName === 'say') {
-
-        // Crear el Modal (ventana emergente)
-        const modal = new ModalBuilder()
-            .setCustomId('sayModal')
-            .setTitle('📝 Enviar mensaje como bot');
-
-        // Campo de texto para el mensaje
-        const messageInput = new TextInputBuilder()
-            .setCustomId('messageContent')
-            .setLabel('¿Qué quieres que diga el bot?')
-            .setPlaceholder('Escribe tu mensaje aquí...')
-            .setStyle(TextInputStyle.Paragraph) // Párrafo = múltiples líneas
-            .setRequired(true)
-            .setMaxLength(2000); // Límite de Discord
-
-        // Agregar el campo al modal
-        const actionRow = new ActionRowBuilder().addComponents(messageInput);
-        modal.addComponents(actionRow);
-
-        // Mostrar el modal al usuario
-        await interaction.showModal(modal);
+(async () => {
+    for (const variable of ['DISCORD_TOKEN', 'CLIENT_ID', 'MONGODB_URI']) {
+        if (!process.env[variable]) {
+            console.error(`❌ Falta la variable de entorno ${variable}`);
+            process.exit(1);
+        }
     }
 
-    // ── Manejar la respuesta del Modal ──
-    if (interaction.isModalSubmit() && interaction.customId === 'sayModal') {
+    await conectarDB();
+    cargarComandos(client);
+    cargarInteracciones(client);
+    cargarEventos(client);
 
-        // Obtener el texto que escribió el usuario
-        const message = interaction.fields.getTextInputValue('messageContent');
-
-        // Enviar el mensaje en el canal como el bot
-        await interaction.channel.send(message);
-
-        // Responder al usuario de forma efímera (solo él lo ve)
-        await interaction.reply({
-            content: '✅ ¡Mensaje enviado!',
-            flags: 64, // Ephemeral - solo el usuario lo ve
-        });
-    }
-});
-
-// ─── Iniciar el bot ───
-client.login(process.env.DISCORD_TOKEN);
+    await client.login(process.env.DISCORD_TOKEN);
+})();
