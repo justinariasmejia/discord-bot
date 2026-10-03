@@ -1,9 +1,16 @@
 ﻿// src/utils/paneles.js
 // Constructores de paneles (embed + componentes) del hub /cripta.
 // Formato customId:  prefijo:accion:duenoId:extra
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
+const {
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    UserSelectMenuBuilder,
+} = require('discord.js');
 const { base, COLORES, formatoNum, tiempoRelativo } = require('./embeds');
 const { TOPE_RACHA } = require('../services/diario');
+const { ITEMS } = require('../data/items');
 const config = require('../data/config');
 
 const boton = (accion, duenoId, etiqueta, emoji, estilo = ButtonStyle.Secondary, deshabilitado = false, extra = '') => {
@@ -16,6 +23,7 @@ const boton = (accion, duenoId, etiqueta, emoji, estilo = ButtonStyle.Secondary,
 const filaVolver = (duenoId) =>
     new ActionRowBuilder().addComponents(boton('menu', duenoId, 'Volver', '⬅️'));
 
+// ─── MENÚ PRINCIPAL DEL HUB ───
 function panelMenu(duenoId, usuario) {
     const embed = base(
         '🎃 La Cripta de los Huesos',
@@ -24,23 +32,38 @@ function panelMenu(duenoId, usuario) {
         COLORES.naranja
     );
 
+    // Fila 1: Cazar, Diario, Apostar, Tienda, Inventario (Exactamente 5 botones)
     const fila1 = new ActionRowBuilder().addComponents(
         boton('cazar', duenoId, 'Cazar', '🏹', ButtonStyle.Primary),
         boton('diario', duenoId, 'Diario', '🎁', ButtonStyle.Success),
         boton('apostar', duenoId, 'Apostar', '🎰', ButtonStyle.Danger),
-        boton('tienda', duenoId, 'Tienda', '🛒')
+        boton('tienda', duenoId, 'Tienda', '🛒'),
+        boton('inventario', duenoId, 'Inventario', '🎒')
     );
-    const fila2 = new ActionRowBuilder().addComponents(
-        boton('inventario', duenoId, 'Inventario', '🎒'),
+
+    // Fila 2: Ranking, Perfil, Robar, (Limosna si califica)
+    const botonesFila2 = [
         boton('ranking', duenoId, 'Ranking', '🏆'),
-        boton('perfil', duenoId, 'Perfil', '👤')
-    );
+        boton('perfil', duenoId, 'Perfil', '👤'),
+        boton('robar_menu', duenoId, 'Robar', '🕵️', ButtonStyle.Secondary),
+    ];
+
+    if (usuario.huesos < config.LIMOSNA.LIMITE_HUESOS) {
+        botonesFila2.push(boton('limosna', duenoId, 'Limosna', '🤲', ButtonStyle.Primary));
+    }
+
+    const fila2 = new ActionRowBuilder().addComponents(botonesFila2);
     return { embeds: [embed], components: [fila1, fila2] };
 }
 
+// ─── PERFIL DEL CAZADOR ───
 function panelPerfil(duenoId, usuario, nombre, posicion, total) {
     const ahora = new Date();
-    const efectos = (usuario.efectos || []).filter((e) => e.expiraEn && e.expiraEn > ahora);
+    const efectos = (usuario.efectos || []).filter((e) => {
+        if (e.expiraEn && e.expiraEn <= ahora) return false;
+        if (e.usosRestantes !== undefined && e.usosRestantes <= 0) return false;
+        return true;
+    });
     const e = usuario.estadisticas || {};
 
     const embed = base(`👤 Perfil de ${nombre}`, `🦴 **${formatoNum(usuario.huesos)}** huesos`, COLORES.morado).addFields(
@@ -58,13 +81,24 @@ function panelPerfil(duenoId, usuario, nombre, posicion, total) {
         },
         {
             name: '✨ Efectos activos',
-            value: efectos.length ? efectos.map((x) => `• ${x.tipo} (${tiempoRelativo(x.expiraEn.getTime())})`).join('\n') : 'Ninguno',
+            value: efectos.length
+                ? efectos
+                      .map((x) => {
+                          const item = ITEMS[x.tipo];
+                          const detalle = x.expiraEn
+                              ? tiempoRelativo(x.expiraEn.getTime())
+                              : `${x.usosRestantes} uso(s)`;
+                          return `• ${item?.emoji || '✨'} **${item?.nombre || x.tipo}** (${detalle})`;
+                      })
+                      .join('\n')
+                : 'Ninguno',
             inline: false,
         }
     );
     return { embeds: [embed], components: [filaVolver(duenoId)] };
 }
 
+// ─── DIARIO ───
 function panelDiario(duenoId, r) {
     let embed;
     if (r.ok) {
@@ -85,6 +119,7 @@ function panelDiario(duenoId, r) {
     return { embeds: [embed], components: [filaVolver(duenoId)] };
 }
 
+// ─── CAZAR ───
 function panelCazarAnimacion(paso) {
     let titulo;
     let descripcion;
@@ -123,12 +158,18 @@ function panelCazar(duenoId, r) {
         return { embeds: [embed], components: [filaVolver(duenoId)] };
     }
 
+    let extraTexto = '';
+    if (r.tieneLinterna) extraTexto += '🏮 _La luz de la linterna guió tus pasos entre la niebla._\n';
+    if (r.detalleDobleONada) extraTexto += `${r.detalleDobleONada}\n`;
+    if (r.detalleMaldicion) extraTexto += `${r.detalleMaldicion.texto}\n`;
+    if (extraTexto) extraTexto = `\n━━━━━━━━━━━━━━━━━━━━\n${extraTexto}`;
+
     if (r.tipo === 'hueso_comun') {
         embed = base(
             `🏹 ${r.titulo}`,
             `${r.descripcion}\n\n` +
             `🦴 Has ganado: **+${formatoNum(r.premio)}** huesos${r.multiplicador > 1 ? ` (¡x${r.multiplicador} por bonus!)` : ''}\n` +
-            `💰 Saldo actual: **${formatoNum(r.usuario.huesos)}** huesos.`,
+            `💰 Saldo actual: **${formatoNum(r.usuario.huesos)}** huesos.${extraTexto}`,
             COLORES.verde
         );
     } else if (r.tipo === 'hueso_raro') {
@@ -137,7 +178,7 @@ function panelCazar(duenoId, r) {
             `${r.descripcion}\n\n` +
             `✨ **¡Recompensa Legendaria!**\n` +
             `🦴 Has ganado: **+${formatoNum(r.premio)}** huesos${r.multiplicador > 1 ? ` (¡x${r.multiplicador} por bonus!)` : ''}\n` +
-            `💰 Saldo actual: **${formatoNum(r.usuario.huesos)}** huesos.`,
+            `💰 Saldo actual: **${formatoNum(r.usuario.huesos)}** huesos.${extraTexto}`,
             COLORES.naranja
         );
     } else if (r.tipo === 'item') {
@@ -147,7 +188,7 @@ function panelCazar(duenoId, r) {
             `${r.item.emoji} **${r.item.nombre}**\n` +
             `📜 _${r.item.descripcion}_\n\n` +
             `🎒 Guardado en tu inventario.\n` +
-            `💰 Saldo actual: **${formatoNum(r.usuario.huesos)}** huesos.`,
+            `💰 Saldo actual: **${formatoNum(r.usuario.huesos)}** huesos.${extraTexto}`,
             COLORES.morado
         );
     } else if (r.tipo === 'emboscada') {
@@ -158,14 +199,14 @@ function panelCazar(duenoId, r) {
             `👻 ${r.titulo}`,
             `${r.descripcion}\n\n` +
             `${detallePerdida}\n` +
-            `💰 Saldo actual: **${formatoNum(r.usuario.huesos)}** huesos.`,
+            `💰 Saldo actual: **${formatoNum(r.usuario.huesos)}** huesos.${extraTexto}`,
             COLORES.rojo
         );
     } else {
         embed = base(
             `🍂 ${r.titulo}`,
             `${r.descripcion}\n\n` +
-            `💰 Saldo actual: **${formatoNum(r.usuario.huesos)}** huesos.`,
+            `💰 Saldo actual: **${formatoNum(r.usuario.huesos)}** huesos.${extraTexto}`,
             COLORES.negro
         );
     }
@@ -173,6 +214,7 @@ function panelCazar(duenoId, r) {
     return { embeds: [embed], components: [filaVolver(duenoId)] };
 }
 
+// ─── RANKING ───
 function panelRanking(duenoId, datos) {
     const MEDALLAS = ['🥇', '🥈', '🥉'];
     const inicioPuesto = (datos.pagina - 1) * 10;
@@ -206,7 +248,7 @@ function panelRanking(duenoId, datos) {
     return { embeds: [embed], components: [filaPaginacion] };
 }
 
-// ─── PANELES DE APUESTAS (Fase 3) ───
+// ─── APUESTAS ───
 function panelMenuApuestas(duenoId, usuario) {
     const maxPermitido = Math.min(
         Math.floor(usuario.huesos * config.APUESTAS.MAXIMO_PORCENTAJE),
@@ -355,7 +397,6 @@ function panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra = 'none') {
 
     const embed = base(titulo, descripcion, color);
 
-    // Botones de acción: Repetir apuesta, Cambiar juego, Menú
     const btnRepetir = new ButtonBuilder()
         .setCustomId(`apuesta:repetir:${duenoId}:${tipoJuego}:${monto}:${extra}`)
         .setLabel(`Apostar de nuevo (${formatoNum(monto)} 🦴)`)
@@ -378,8 +419,192 @@ function panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra = 'none') {
     return { embeds: [embed], components: [filaBotones] };
 }
 
-function panelProximamente(duenoId, nombre, fase) {
-    const embed = base(`🔒 ${nombre}`, `Esta zona de la Cripta aún está sellada.\nSe abrirá en la **Fase ${fase}**.`, COLORES.negro);
+// ─── TIENDA (Fase 4) ───
+function panelTienda(duenoId, usuario, itemElegidoId = null) {
+    let desc = `🛒 **Bazar de los Nigromantes**\n` +
+        `Artefactos y pociones forjadas para dominar la Cripta.\n\n` +
+        `🦴 **Tus huesos disponibles:** ${formatoNum(usuario.huesos)}\n\n`;
+
+    const item = itemElegidoId ? ITEMS[itemElegidoId] : null;
+
+    if (item) {
+        desc += `📌 **Ítem Seleccionado:**\n` +
+            `${item.emoji} **${item.nombre}** — **${formatoNum(item.precio)}** 🦴\n` +
+            `📜 _${item.descripcion}_\n\n` +
+            `Selecciona una cantidad para adquirir:`;
+    } else {
+        desc += `Selecciona un artículo en el menú inferior para ver sus propiedades y adquirirlo.`;
+    }
+
+    const embed = base('🛒 Tienda de la Cripta', desc, COLORES.naranja);
+
+    const selectItems = new StringSelectMenuBuilder()
+        .setCustomId(`cripta:sel_tienda:${duenoId}`)
+        .setPlaceholder('Elige un artículo de la tienda...')
+        .addOptions(
+            Object.values(ITEMS).map((it) => ({
+                label: `${it.nombre} (${formatoNum(it.precio)} 🦴)`,
+                value: it.id,
+                description: it.descripcion.slice(0, 95),
+                emoji: it.emoji,
+                default: it.id === itemElegidoId,
+            }))
+        );
+
+    const filaSelect = new ActionRowBuilder().addComponents(selectItems);
+    const componentes = [filaSelect];
+
+    if (item) {
+        const filaComprar = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`cripta:comprar:${duenoId}:${item.id}:1`)
+                .setLabel(`Comprar x1 (${formatoNum(item.precio)} 🦴)`)
+                .setStyle(ButtonStyle.Success)
+                .setDisabled(usuario.huesos < item.precio),
+            new ButtonBuilder()
+                .setCustomId(`cripta:comprar:${duenoId}:${item.id}:3`)
+                .setLabel(`x3 (${formatoNum(item.precio * 3)} 🦴)`)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(usuario.huesos < item.precio * 3),
+            new ButtonBuilder()
+                .setCustomId(`cripta:comprar:${duenoId}:${item.id}:5`)
+                .setLabel(`x5 (${formatoNum(item.precio * 5)} 🦴)`)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(usuario.huesos < item.precio * 5)
+        );
+        componentes.push(filaComprar);
+    }
+
+    componentes.push(filaVolver(duenoId));
+    return { embeds: [embed], components: componentes };
+}
+
+// ─── INVENTARIO (Fase 4) ───
+function panelInventario(duenoId, usuario, itemSeleccionadoId = null) {
+    const ahora = new Date();
+    const efectos = (usuario.efectos || []).filter((e) => {
+        if (e.expiraEn && e.expiraEn <= ahora) return false;
+        if (e.usosRestantes !== undefined && e.usosRestantes <= 0) return false;
+        return true;
+    });
+
+    const itemsConCantidad = (usuario.inventario || []).filter((i) => i.cantidad > 0);
+
+    let desc = `🎒 **Tu Mochila Espectral**\n\n`;
+
+    if (itemsConCantidad.length === 0) {
+        desc += `_Tu inventario está vacío. Visita la **Tienda** para conseguir artefactos._\n\n`;
+    } else {
+        desc += `📦 **Objetos en posesión:**\n`;
+        itemsConCantidad.forEach((inv) => {
+            const it = ITEMS[inv.itemId];
+            if (it) {
+                desc += `• ${it.emoji} **${it.nombre}** x${inv.cantidad}\n  _${it.descripcion}_\n`;
+            }
+        });
+        desc += '\n';
+    }
+
+    desc += `✨ **Efectos Activos:**\n`;
+    if (efectos.length === 0) {
+        desc += `_No tienes ningún encantamiento activo actualmente._\n`;
+    } else {
+        efectos.forEach((ef) => {
+            const it = ITEMS[ef.tipo];
+            const dur = ef.expiraEn ? tiempoRelativo(ef.expiraEn.getTime()) : `${ef.usosRestantes} uso(s)`;
+            desc += `• ${it?.emoji || '✨'} **${it?.nombre || ef.tipo}** (${dur})\n`;
+        });
+    }
+
+    const embed = base('🎒 Inventario de Artefactos', desc, COLORES.morado);
+    const componentes = [];
+
+    if (itemsConCantidad.length > 0) {
+        const selectUsar = new StringSelectMenuBuilder()
+            .setCustomId(`cripta:sel_usar:${duenoId}`)
+            .setPlaceholder('Selecciona un objeto de tu inventario...')
+            .addOptions(
+                itemsConCantidad.map((inv) => {
+                    const it = ITEMS[inv.itemId];
+                    return {
+                        label: `${it ? it.nombre : inv.itemId} (x${inv.cantidad})`,
+                        value: inv.itemId,
+                        description: it ? it.descripcion.slice(0, 95) : '',
+                        emoji: it?.emoji || '📦',
+                        default: inv.itemId === itemSeleccionadoId,
+                    };
+                })
+            );
+        componentes.push(new ActionRowBuilder().addComponents(selectUsar));
+
+        if (itemSeleccionadoId && itemSeleccionadoId !== 'llave_cofre') {
+            const itElegido = ITEMS[itemSeleccionadoId];
+            const btnUsar = new ButtonBuilder()
+                .setCustomId(`cripta:usar:${duenoId}:${itemSeleccionadoId}`)
+                .setLabel(`Consumir / Activar ${itElegido?.nombre || 'Ítem'}`)
+                .setEmoji('✨')
+                .setStyle(ButtonStyle.Success);
+            componentes.push(new ActionRowBuilder().addComponents(btnUsar));
+        }
+    }
+
+    componentes.push(filaVolver(duenoId));
+    return { embeds: [embed], components: componentes };
+}
+
+// ─── ROBAR (Fase 4) ───
+function panelRobarMenu(duenoId, usuario) {
+    const desc = `🕵️ **El Callejón de las Sombras**\n` +
+        `Puedes intentar despojar de sus huesos a otro cazador del servidor.\n\n` +
+        `⚖️ **Reglas del Robo:**\n` +
+        `• Enfriamiento: **2 horas** entre intentos.\n` +
+        `• La víctima debe tener al menos **${config.ROBAR.MINIMO_HUESOS_VICTIMA}** huesos.\n` +
+        `• No puedes robarte a ti mismo ni a los autómatas (bots).\n` +
+        `• Éxito: Robas entre el **5% y 15%** de los huesos de tu víctima.\n` +
+        `• Fallo: Si eres descubierto, pagarás una multa de indemnización (5% a 10% de tus huesos).\n` +
+        `• 🧿 Los jugadores protegidos por un **Amuleto** repelen el robo y te hacen pagar una penalización.\n\n` +
+        `Selecciona a tu objetivo a continuación:`;
+
+    const embed = base('🕵️ Asalto en las Sombras', desc, COLORES.negro);
+
+    const userSelect = new UserSelectMenuBuilder()
+        .setCustomId(`cripta:sel_robar:${duenoId}`)
+        .setPlaceholder('Selecciona al cazador que deseas asaltar...')
+        .setMaxValues(1);
+
+    const filaSelect = new ActionRowBuilder().addComponents(userSelect);
+    return { embeds: [embed], components: [filaSelect, filaVolver(duenoId)] };
+}
+
+// ─── LIMOSNA (Fase 4) ───
+function panelLimosna(duenoId, r) {
+    let embed;
+    if (r.ok) {
+        embed = base(
+            '🤲 La Compasión del Fantasma',
+            `Un espíritu errante se compadece de tu miseria.\n` +
+            `Te entrega **+${formatoNum(r.premio)}** huesos 🦴 de socorro para que puedas reanudar tu cacería.\n\n` +
+            `💰 Saldo actual: **${formatoNum(r.usuario.huesos)}** huesos.`,
+            COLORES.verde
+        );
+    } else if (r.motivo === 'no_califica') {
+        embed = base(
+            '🤲 No calificas para limosna',
+            `El fantasma solo ayuda a los mendigos con menos de **${r.limite}** huesos.\n` +
+            `Tu saldo actual es de **${formatoNum(r.saldo)}** huesos.`,
+            COLORES.morado
+        );
+    } else if (r.motivo === 'cooldown') {
+        embed = base(
+            '⏳ El fantasma ya te ayudó hoy',
+            `Solo puedes recibir la limosna de auxilio una vez cada 24 horas.\n` +
+            `Podrás volver a pedirla ${tiempoRelativo(r.proximo)}.`,
+            COLORES.morado
+        );
+    } else {
+        embed = base('🕯️ La Cripta ha cerrado', 'El evento ha finalizado.', COLORES.negro);
+    }
+
     return { embeds: [embed], components: [filaVolver(duenoId)] };
 }
 
@@ -393,6 +618,9 @@ module.exports = {
     panelMenuApuestas,
     panelAnimacionApuesta,
     panelResultadoApuesta,
-    panelProximamente,
+    panelTienda,
+    panelInventario,
+    panelRobarMenu,
+    panelLimosna,
     filaVolver,
 };

@@ -1,32 +1,33 @@
 // deploy-commands.js
-// Registra automáticamente todos los comandos de /src/commands.
-// Uso: npm run deploy   (solo cuando agregues o cambies comandos)
+// Registra o actualiza los comandos slash globalmente en la API de Discord.
 require('dotenv').config();
+const { REST, Routes } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-const { REST, Routes } = require('discord.js');
 
-const dir = path.join(__dirname, 'src', 'commands');
-const commands = fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith('.js'))
-    .map((f) => require(path.join(dir, f)).data.toJSON());
+const comandos = [];
+const rutaComandos = path.join(__dirname, 'src', 'commands');
+const archivos = fs.readdirSync(rutaComandos).filter((f) => f.endsWith('.js'));
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+for (const archivo of archivos) {
+    const comando = require(path.join(rutaComandos, archivo));
+    if ('data' in comando && 'ejecutar' in comando) {
+        comandos.push(comando.data.toJSON());
+        console.log(`  + Preparado comando: /${comando.data.name}`);
+    }
+}
+
+const rest = new REST().setToken(process.env.DISCORD_TOKEN);
 
 (async () => {
     try {
-        console.log('🔄 Registrando slash commands...');
-        const ruta = process.env.GUILD_ID
-            ? Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID)
-            : Routes.applicationCommands(process.env.CLIENT_ID);
-
-        await rest.put(ruta, { body: commands });
-
-        console.log(`✅ Registrados (${process.env.GUILD_ID ? 'solo servidor' : 'globales'}):`);
-        commands.forEach((c) => console.log(`   /${c.name} - ${c.description}`));
+        console.log(`📡 Registrando ${comandos.length} comandos slash globales...`);
+        const data = await rest.put(
+            Routes.applicationCommands(process.env.CLIENT_ID),
+            { body: comandos }
+        );
+        console.log(`✅ ${data.length} comandos slash registrados exitosamente con Discord.`);
     } catch (error) {
-        console.error('❌ Error registrando commands:', error);
-        process.exit(1);
+        console.error('❌ Error registrando comandos:', error);
     }
 })();

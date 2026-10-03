@@ -1,10 +1,15 @@
 ﻿// src/services/cazar.js
-// Servicio de cacería en la Cripta de los Huesos.
+// Servicio de cacería en la Cripta de los Huesos con soporte para ítems y maldiciones.
 const Usuario = require('../models/Usuario');
-const { obtenerUsuario, registrarTransaccion } = require('./economia');
+const { obtenerUsuario, registrarTransaccion, modificarHuesos } = require('./economia');
 const { obtenerConfig, eventoActivo, multiplicadorActual } = require('./evento');
 const { conBloqueo } = require('../utils/locks');
 const { generarBotinCaza } = require('../data/loot');
+const {
+    tieneEfectoActivo,
+    consumirUsoEfecto,
+    limpiarEfectosExpirados,
+} = require('./efectos');
 const configBalance = require('../data/config');
 
 async function cazar(userId, guildId) {
@@ -14,7 +19,9 @@ async function cazar(userId, guildId) {
     }
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
-        const usuario = await obtenerUsuario(userId, guildId);
+        let usuario = await obtenerUsuario(userId, guildId);
+        usuario = await limpiarEfectosExpirados(usuario);
+
         const ahora = Date.now();
         const ultimo = usuario.ultimoCazar ? usuario.ultimoCazar.getTime() : null;
 
@@ -26,12 +33,48 @@ async function cazar(userId, guildId) {
             };
         }
 
-        const botin = generarBotinCaza();
+        // Efecto Linterna: si está activa, mejora la probabilidad de hallar algo valioso
+        const tieneLinterna = tieneEfectoActivo(usuario, 'linterna');
+        let botin = generarBotinCaza();
+        if (tieneLinterna && (botin.tipo === 'nada' || botin.tipo === 'emboscada')) {
+            // La linterna disipa las sombras y da una segunda oportunidad
+            botin = generarBotinCaza();
+        }
+
+        // Efecto Doble o Nada
+        const tieneDobleONada = tieneEfectoActivo(usuario, 'doble_o_nada');
+        let detalleDobleONada = null;
+
+        // Maldición suave aleatoria
+        let detalleMaldicion = null;
+        if (configBalance.MALDICIONES_SUAVES.ACTIVADAS && Math.random() < configBalance.MALDICIONES_SUAVES.PROBABILIDAD) {
+            const pct = Math.random() * (configBalance.MALDICIONES_SUAVES.PERDIDA_MAX_PCT - configBalance.MALDICIONES_SUAVES.PERDIDA_MIN_PCT) + configBalance.MALDICIONES_SUAVES.PERDIDA_MIN_PCT;
+            const perdidaM = Math.max(1, Math.floor(usuario.huesos * pct));
+            if (perdidaM > 0 && usuario.huesos > perdidaM) {
+                await modificarHuesos(userId, guildId, -perdidaM, 'maldicion', 'Susurro de la Cripta');
+                detalleMaldicion = {
+                    perdida: perdidaM,
+                    texto: `👻 Un escalofrío recorre tu nuca... Un susurro maldito se llevó **${perdidaM}** huesos.`,
+                };
+            }
+        }
 
         // ── Caso A: Ganancia de huesos (Común o Raro) ──
         if (botin.tipo === 'hueso_comun' || botin.tipo === 'hueso_raro') {
             const multiplicador = multiplicadorActual(config);
-            const premio = Math.round(botin.huesosBase * multiplicador);
+            let premio = Math.round(botin.huesosBase * multiplicador);
+
+            if (tieneDobleONada) {
+                await consumirUsoEfecto(userId, guildId, 'doble_o_nada');
+                const exitoDoble = Math.random() < 0.5;
+                if (exitoDoble) {
+                    premio *= 2;
+                    detalleDobleONada = '⚡ **¡Doble o Nada ÉPICO!** Tu botín de huesos se ha duplicado.';
+                } else {
+                    premio = 0;
+                    detalleDobleONada = '⚡ **Doble o Nada fallido:** La oscuridad absorbió todo el botín.';
+                }
+            }
 
             const actualizado = await Usuario.findOneAndUpdate(
                 { userId, guildId, ultimoCazar: usuario.ultimoCazar ?? null },
@@ -44,14 +87,16 @@ async function cazar(userId, guildId) {
 
             if (!actualizado) return { ok: false, motivo: 'conflicto' };
 
-            await registrarTransaccion(
-                userId,
-                guildId,
-                'cazar',
-                premio,
-                actualizado.huesos,
-                `${botin.titulo} (x${multiplicador})`
-            );
+            if (premio > 0) {
+                await registrarTransaccion(
+                    userId,
+                    guildId,
+                    'cazar',
+                    premio,
+                    actualizado.huesos,
+                    `${botin.titulo} (x${multiplicador})`
+                );
+            }
 
             return {
                 ok: true,
@@ -60,6 +105,9 @@ async function cazar(userId, guildId) {
                 descripcion: botin.descripcion,
                 premio,
                 multiplicador,
+                detalleDobleONada,
+                detalleMaldicion,
+                tieneLinterna,
                 usuario: actualizado,
             };
         }
@@ -113,11 +161,13 @@ async function cazar(userId, guildId) {
                 titulo: botin.titulo,
                 descripcion: botin.descripcion,
                 item,
+                detalleMaldicion,
+                tieneLinterna,
                 usuario: actualizado,
             };
         }
 
-        // ── Caso C: Emboscada de monstruo (pérdida de huesos) ──
+        // ── Caso C: Emboscada de monstruo ──
         if (botin.tipo === 'emboscada') {
             let perdida = Math.floor(usuario.huesos * configBalance.CAZAR.EMBOSCADA_PORCENTAJE);
             if (usuario.huesos > 0 && perdida < 1) perdida = 1;
@@ -161,6 +211,8 @@ async function cazar(userId, guildId) {
                 titulo: botin.titulo,
                 descripcion: botin.descripcion,
                 perdida,
+                detalleMaldicion,
+                tieneLinterna,
                 usuario: actualizado,
             };
         }
@@ -182,6 +234,8 @@ async function cazar(userId, guildId) {
             tipo: 'nada',
             titulo: botin.titulo,
             descripcion: botin.descripcion,
+            detalleMaldicion,
+            tieneLinterna,
             usuario: actualizado,
         };
     });

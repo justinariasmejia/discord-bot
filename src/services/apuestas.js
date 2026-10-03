@@ -1,12 +1,12 @@
 ﻿// src/services/apuestas.js
-// Lógica de negocio y resolución de juegos de apuestas.
+// Lógica de negocio y resolución de juegos de apuestas con consumo de pociones.
 const Usuario = require('../models/Usuario');
 const { obtenerUsuario, modificarHuesos } = require('./economia');
 const { obtenerConfig, eventoActivo } = require('./evento');
 const { conBloqueo } = require('../utils/locks');
+const { consumirUsoEfecto, tieneEfectoActivo } = require('./efectos');
 const config = require('../data/config');
 
-// Mapa en memoria para el cooldown de 5 segundos entre apuestas por usuario
 const cooldownsApuesta = new Map();
 
 function verificarCooldown(userId) {
@@ -57,7 +57,6 @@ function validarApuesta(usuario, monto) {
     return { valida: true, monto };
 }
 
-// Hook de modificadores (ej: Poción de Suerte de la Fase 4)
 function calcularProbabilidad(probBase, usuario) {
     let prob = probBase;
     const ahora = new Date();
@@ -67,7 +66,7 @@ function calcularProbabilidad(probBase, usuario) {
     if (pocion) {
         prob += (pocion.valor || 0.05);
     }
-    return Math.min(prob, 0.95); // Límite de seguridad
+    return Math.min(prob, 0.95);
 }
 
 // ── 1. Cara o Cruz ──
@@ -83,11 +82,14 @@ async function apostarCaraCruz(userId, guildId, monto, eleccion) {
         const val = validarApuesta(usuario, monto);
         if (!val.valida) return { ok: false, motivo: 'invalido', detalle: val.motivo };
 
-        // Deducción atómica previa
         const deducido = await modificarHuesos(userId, guildId, -monto, 'apuesta', 'Apuesta Cara o Cruz');
         if (!deducido) return { ok: false, motivo: 'saldo_insuficiente' };
 
         const prob = calcularProbabilidad(config.APUESTAS.CARA_CRUZ.PROB_VICTORIA_BASE, usuario);
+        if (tieneEfectoActivo(usuario, 'pocion_suerte')) {
+            await consumirUsoEfecto(userId, guildId, 'pocion_suerte');
+        }
+
         const gana = Math.random() < prob;
         const resultadoLado = gana ? eleccion : (eleccion === 'cara' ? 'cruz' : 'cara');
 
@@ -138,6 +140,10 @@ async function apostarDados(userId, guildId, monto, tipoTier, valorExtra) {
         const deducido = await modificarHuesos(userId, guildId, -monto, 'apuesta', 'Apuesta Dados Malditos');
         if (!deducido) return { ok: false, motivo: 'saldo_insuficiente' };
 
+        if (tieneEfectoActivo(usuario, 'pocion_suerte')) {
+            await consumirUsoEfecto(userId, guildId, 'pocion_suerte');
+        }
+
         const dado1 = Math.floor(Math.random() * 6) + 1;
         const dado2 = Math.floor(Math.random() * 6) + 1;
         const suma = dado1 + dado2;
@@ -146,26 +152,22 @@ async function apostarDados(userId, guildId, monto, tipoTier, valorExtra) {
         let mult = 0;
 
         if (tipoTier === 'bajo') {
-            // Suma 2 a 6
             if (suma >= 2 && suma <= 6) {
                 gana = true;
                 mult = config.APUESTAS.DADOS.PAGO_BAJO_ALTO;
             }
         } else if (tipoTier === 'alto') {
-            // Suma 8 a 12
             if (suma >= 8 && suma <= 12) {
                 gana = true;
                 mult = config.APUESTAS.DADOS.PAGO_BAJO_ALTO;
             }
         } else if (tipoTier === 'rango2') {
-            // Dos números consecutivos elegidos (ej: 7-8)
             const numInicio = parseInt(valorExtra, 10);
             if (suma === numInicio || suma === numInicio + 1) {
                 gana = true;
                 mult = config.APUESTAS.DADOS.PAGO_RANGO_DOS;
             }
         } else if (tipoTier === 'exacto') {
-            // Número exacto (2 a 12)
             const numExacto = parseInt(valorExtra, 10);
             if (suma === numExacto) {
                 gana = true;
@@ -223,7 +225,10 @@ async function apostarRuleta(userId, guildId, monto, colorElegido) {
         const deducido = await modificarHuesos(userId, guildId, -monto, 'apuesta', 'Apuesta Ruleta');
         if (!deducido) return { ok: false, motivo: 'saldo_insuficiente' };
 
-        // 37 números: 0 (verde), 1-18 (rojo), 19-36 (negro)
+        if (tieneEfectoActivo(usuario, 'pocion_suerte')) {
+            await consumirUsoEfecto(userId, guildId, 'pocion_suerte');
+        }
+
         const numero = Math.floor(Math.random() * config.APUESTAS.RULETA.TOTAL_CASILLAS);
         let colorResultado = 'verde';
         if (numero >= 1 && numero <= 18) colorResultado = 'rojo';
@@ -294,6 +299,10 @@ async function apostarTragamonedas(userId, guildId, monto) {
 
         const deducido = await modificarHuesos(userId, guildId, -monto, 'apuesta', 'Apuesta Tragamonedas');
         if (!deducido) return { ok: false, motivo: 'saldo_insuficiente' };
+
+        if (tieneEfectoActivo(usuario, 'pocion_suerte')) {
+            await consumirUsoEfecto(userId, guildId, 'pocion_suerte');
+        }
 
         const s1 = obtenerSimboloTragamonedas();
         const s2 = obtenerSimboloTragamonedas();

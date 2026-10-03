@@ -1,6 +1,10 @@
-﻿const { iniciarServicioSalonFama } = require('../services/salonFama');
+// src/events/ready.js
+// Inicializador de servicios del bot al conectar.
+const { iniciarServicioSalonFama } = require('../services/salonFama');
 const { reembolsarRondasPendientes } = require('../services/ruletaGrupal');
 const { reembolsarDuelosPendientes } = require('../services/duelos');
+const { iniciarServicioEventosAleatorios } = require('../services/eventos-aleatorios');
+const { iniciarServicioCierre } = require('../services/cierre');
 
 module.exports = {
     name: 'clientReady',
@@ -17,5 +21,11 @@ module.exports = {
 
         // Inicia el servicio recurrente del Salón de la Fama
         iniciarServicioSalonFama(client);
+
+        // Inicia el servicio de eventos aleatorios comunitarios (Fase 5)
+        iniciarServicioEventosAleatorios(client);
+
+        // Inicia el verificador de cierre automático de eventos (Fase 5)
+        iniciarServicioCierre(client);
     },
 };
