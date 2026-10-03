@@ -351,6 +351,10 @@ module.exports = {
                     titulo = '🕯️ La Cripta ha cerrado';
                     desc = 'El evento ha finalizado.';
                     col = COLORES.negro;
+                } else if (res.motivo === 'victima_bot') {
+                    titulo = '🤖 Objetivo Inválido';
+                    desc = 'No puedes robar a un bot. Solo puedes asaltar a otros cazadores humanos.';
+                    col = COLORES.morado;
                 } else if (res.motivo === 'ocupado') {
                     titulo = '⏳ Un momento';
                     desc = 'Se está procesando otra acción entre estos cazadores.';

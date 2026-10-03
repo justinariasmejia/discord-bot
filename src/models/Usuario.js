@@ -1,3 +1,4 @@
+// src/models/Usuario.js
 const { Schema, model } = require('mongoose');
 
 const usuarioSchema = new Schema(
@@ -19,6 +20,9 @@ const usuarioSchema = new Schema(
             perdido: { type: Number, default: 0 },
             duelosGanados: { type: Number, default: 0 },
             duelosPerdidos: { type: Number, default: 0 },
+            robosExitosos: { type: Number, default: 0 },
+            robosFallidos: { type: Number, default: 0 },
+            vecesRobado: { type: Number, default: 0 },
         },
     },
     { timestamps: true }

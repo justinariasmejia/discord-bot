@@ -80,6 +80,13 @@ function panelPerfil(duenoId, usuario, nombre, posicion, total) {
             inline: false,
         },
         {
+            name: '🕵️ Estadísticas de Robos',
+            value: `• Robos exitosos: **${e.robosExitosos || 0}**\n` +
+                   `• Robos fallidos: **${e.robosFallidos || 0}**\n` +
+                   `• Veces robado: **${e.vecesRobado || 0}**`,
+            inline: true,
+        },
+        {
             name: '✨ Efectos activos',
             value: efectos.length
                 ? efectos
@@ -338,6 +345,7 @@ function panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra = 'none') {
     let color;
 
     if (!res.ok) {
+        let embed;
         if (res.motivo === 'cooldown') {
             const seg = (res.restanteMs / 1000).toFixed(1);
             embed = base('⏳ Calma tu vicio', `Debes esperar **${seg}s** antes de apostar nuevamente.`, COLORES.morado);

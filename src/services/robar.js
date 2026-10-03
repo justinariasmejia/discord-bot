@@ -30,6 +30,16 @@ async function robar(ladronId, victimaId, guildId, client) {
         return { ok: false, motivo: 'auto_robo' };
     }
 
+    // Verificar si la víctima es un bot
+    if (client) {
+        try {
+            const miembro = await client.users.fetch(victimaId).catch(() => null);
+            if (miembro && miembro.bot) {
+                return { ok: false, motivo: 'victima_bot' };
+            }
+        } catch { /* ignorar */ }
+    }
+
     const cd = verificarCooldownRobo(ladronId);
     if (cd.enCooldown) {
         return { ok: false, motivo: 'cooldown', proximo: cd.proximo };
@@ -59,6 +69,7 @@ async function robar(ladronId, victimaId, guildId, client) {
                 if (multaAmuleto > 0) {
                     await modificarHuesos(ladronId, guildId, -multaAmuleto, 'multa_robo', 'Repelido por Amuleto');
                 }
+                await Usuario.updateOne({ userId: ladronId, guildId }, { $inc: { 'estadisticas.robosFallidos': 1 } });
                 return {
                     ok: false,
                     motivo: 'victima_inmune',
@@ -89,6 +100,10 @@ async function robar(ladronId, victimaId, guildId, client) {
                 await modificarHuesos(victimaId, guildId, -montoRobado, 'robo', 'Víctima de robo');
                 const ladronActualizado = await modificarHuesos(ladronId, guildId, montoRobado, 'robo', 'Botín de robo');
 
+                // Registrar estadísticas
+                await Usuario.updateOne({ userId: ladronId, guildId }, { $inc: { 'estadisticas.robosExitosos': 1 } });
+                await Usuario.updateOne({ userId: victimaId, guildId }, { $inc: { 'estadisticas.vecesRobado': 1 } });
+
                 // Notificación pública anónima (el ladrón permanece oculto)
                 if (canalPublico && canalPublico.isTextBased()) {
                     const embedAlerta = base(
@@ -116,6 +131,9 @@ async function robar(ladronId, victimaId, guildId, client) {
                     await modificarHuesos(ladronId, guildId, -multaEfectiva, 'multa_robo', 'Multa por robo fallido');
                     await modificarHuesos(victimaId, guildId, multaEfectiva, 'compensacion_robo', 'Compensación por intento de robo');
                 }
+
+                // Registrar estadísticas
+                await Usuario.updateOne({ userId: ladronId, guildId }, { $inc: { 'estadisticas.robosFallidos': 1 } });
 
                 const ladronActualizado = await obtenerUsuario(ladronId, guildId);
 
