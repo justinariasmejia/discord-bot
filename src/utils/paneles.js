@@ -8,7 +8,7 @@ const {
     StringSelectMenuBuilder,
     UserSelectMenuBuilder,
 } = require('discord.js');
-const { base, COLORES, formatoNum, tiempoRelativo } = require('./embeds');
+const { base, basePremium, COLORES, formatoNum, tiempoRelativo, SEPARADOR, BARRA_PROGRESO } = require('./embeds');
 const { TOPE_RACHA } = require('../services/diario');
 const { ITEMS } = require('../data/items');
 const config = require('../data/config');
@@ -25,10 +25,23 @@ const filaVolver = (duenoId) =>
 
 // ─── MENÚ PRINCIPAL DEL HUB ───
 function panelMenu(duenoId, usuario) {
+    const efectosActivos = (usuario.efectos || []).filter((e) => {
+        if (e.expiraEn && e.expiraEn <= new Date()) return false;
+        if (e.usosRestantes !== undefined && e.usosRestantes <= 0) return false;
+        return true;
+    });
+    const efectoTexto = efectosActivos.length > 0
+        ? `\n✨ **Efectos activos:** ${efectosActivos.length}`
+        : '';
+
     const embed = base(
         '🎃 La Cripta de los Huesos',
-        `Bienvenido a la Cripta. Reúne huesos, desafía la suerte y llega al top antes del cierre.\n\n` +
-            `🦴 **Tus huesos:** ${formatoNum(usuario.huesos)}`,
+        `> *Bienvenido a la Cripta, mortal. Reúne huesos, desafía la suerte y escala al trono antes del cierre.*\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `🦴 **Tus huesos:** ${formatoNum(usuario.huesos)}\n` +
+            `🔥 **Racha diaria:** ${usuario.rachaDiaria || 0} día(s)` +
+            efectoTexto +
+            `\n━━━━━━━━━━━━━━━━━━━━━━━━`,
         COLORES.naranja
     );
 
@@ -57,7 +70,7 @@ function panelMenu(duenoId, usuario) {
 }
 
 // ─── PERFIL DEL CAZADOR ───
-function panelPerfil(duenoId, usuario, nombre, posicion, total) {
+function panelPerfil(duenoId, usuario, nombre, posicion, total, avatarURL) {
     const ahora = new Date();
     const efectos = (usuario.efectos || []).filter((e) => {
         if (e.expiraEn && e.expiraEn <= ahora) return false;
@@ -66,7 +79,20 @@ function panelPerfil(duenoId, usuario, nombre, posicion, total) {
     });
     const e = usuario.estadisticas || {};
 
-    const embed = base(`👤 Perfil de ${nombre}`, `🦴 **${formatoNum(usuario.huesos)}** huesos`, COLORES.morado).addFields(
+    const pctRanking = total > 1 ? 1 - ((posicion - 1) / (total - 1)) : 1;
+    const barra = BARRA_PROGRESO(pctRanking);
+
+    const embed = basePremium(
+        `👤 ${nombre}`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🦴 **${formatoNum(usuario.huesos)}** huesos\n` +
+        `🏆 Posición #${formatoNum(posicion)} de ${formatoNum(total)}\n` +
+        `${barra} ${Math.round(pctRanking * 100)}% del top\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━`,
+        COLORES.morado
+    );
+    if (avatarURL) embed.setThumbnail(avatarURL);
+    embed.addFields(
         { name: '🏆 Posición', value: `#${formatoNum(posicion)} de ${formatoNum(total)}`, inline: true },
         { name: '🔥 Racha diaria', value: `${usuario.rachaDiaria || 0} día(s)`, inline: true },
         { name: '🏹 Cacerías', value: `${e.cazados || 0}`, inline: true },

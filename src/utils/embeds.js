@@ -1,4 +1,5 @@
-// Sistema central de embeds con la estética de Halloween.
+// src/utils/embeds.js
+// Sistema central de embeds premium con estética de Halloween profesional.
 const { EmbedBuilder } = require('discord.js');
 
 const COLORES = {
@@ -7,19 +8,42 @@ const COLORES = {
     negro: 0x1a1a1a,
     rojo: 0xb00020,
     verde: 0x2e7d32,
+    azul: 0x1565c0,
+    dorado: 0xffd700,
+    teal: 0x00897b,
+    rosa: 0xe91e63,
 };
 
 const formatoNum = (n) => Number(n).toLocaleString('es-DO');
 const tiempoRelativo = (ms) => `<t:${Math.floor(ms / 1000)}:R>`;
+const tiempoCorto = (ms) => `<t:${Math.floor(ms / 1000)}:f>`;
 
 function base(titulo, descripcion, color = COLORES.naranja) {
     return new EmbedBuilder()
         .setColor(color)
         .setTitle(titulo)
         .setDescription(descripcion)
-        .setFooter({ text: '🎃 La Cripta de los Huesos' });
+        .setTimestamp()
+        .setFooter({ text: '🎃 La Cripta de los Huesos • Temporada Activa', iconURL: 'https://cdn.discordapp.com/emojis/1159187838853275708.webp' });
+}
+
+function basePremium(titulo, descripcion, color = COLORES.naranja) {
+    return new EmbedBuilder()
+        .setColor(color)
+        .setTitle(titulo)
+        .setDescription(descripcion)
+        .setTimestamp()
+        .setFooter({ text: '🎃 La Cripta de los Huesos', iconURL: 'https://cdn.discordapp.com/emojis/1159187838853275708.webp' });
 }
 
 const embedError = (descripcion) => base('💀 Algo salió mal', descripcion, COLORES.rojo);
 
-module.exports = { COLORES, formatoNum, tiempoRelativo, base, embedError };
+const SEPARADOR = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+const SEPARADOR_FINO = '─────────────────────────────';
+const BARRA_PROGRESO = (pct, largo = 10) => {
+    const llenos = Math.round(pct * largo);
+    const vacios = largo - llenos;
+    return '█'.repeat(llenos) + '░'.repeat(vacios);
+};
+
+module.exports = { COLORES, formatoNum, tiempoRelativo, tiempoCorto, base, basePremium, embedError, SEPARADOR, SEPARADOR_FINO, BARRA_PROGRESO };

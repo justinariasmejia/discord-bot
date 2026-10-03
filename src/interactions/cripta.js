@@ -18,6 +18,7 @@ const { usarItem } = require('../services/inventario');
 const { robar } = require('../services/robar');
 const { solicitarLimosna } = require('../services/limosna');
 const configBalance = require('../data/config');
+const { logCaza, logApuesta, logRobo, logCompra } = require('../services/logger');
 const { base, COLORES, formatoNum, tiempoRelativo } = require('../utils/embeds');
 const {
     panelMenu,
@@ -56,7 +57,9 @@ module.exports = {
             const res = await cazar(duenoId, interaction.guildId);
 
             if (!res.ok) {
-                return interaction.editReply(panelCazar(duenoId, res));
+                // Registrar en logs
+            logCaza(interaction.guildId, duenoId, res).catch(() => null);
+            return interaction.editReply(panelCazar(duenoId, res));
             }
 
             await interaction.editReply(panelCazarAnimacion(1));

@@ -3,7 +3,8 @@
 const { MessageFlags } = require('discord.js');
 const Usuario = require('../models/Usuario');
 const Transaccion = require('../models/Transaccion');
-const { base, COLORES } = require('../utils/embeds');
+const { basePremium, COLORES } = require('../utils/embeds');
+const { logAdmin } = require('../services/logger');
 
 module.exports = {
     prefijo: 'admin',
@@ -14,7 +15,7 @@ module.exports = {
 
         if (interaction.user.id !== duenoId) {
             return interaction.reply({
-                content: '🔒 No tienes permiso para utilizar este botón de confirmación.',
+                content: '🔒 No tienes permiso para utilizar este botón.',
                 flags: MessageFlags.Ephemeral,
             });
         }
@@ -30,20 +31,19 @@ module.exports = {
         if (accion === 'reset_confirmar') {
             await interaction.deferUpdate();
 
-            // Borrado y reinicio de la colección de usuarios para este servidor
+            const totalBorrados = await Usuario.countDocuments({ guildId: interaction.guildId });
             await Usuario.deleteMany({ guildId: interaction.guildId });
             await Transaccion.deleteMany({ guildId: interaction.guildId });
 
-            const embedFinal = base(
+            const embedFinal = basePremium(
                 '💣 ECONOMÍA REINICIADA',
-                'Todos los registros de cazadores, inventarios y saldos han sido reseteados a cero en este servidor.',
+                `Se han eliminado **${totalBorrados}** registros de cazadores.\n\n` +
+                'Todos los huesos, inventarios, estadísticas y transacciones han sido borrados.',
                 COLORES.rojo
             );
 
-            return interaction.editReply({
-                embeds: [embedFinal],
-                components: [],
-            });
+            await logAdmin(interaction.guildId, interaction.user.id, 'Reset Economía', `${totalBorrados} cazadores eliminados.`);
+            return interaction.editReply({ embeds: [embedFinal], components: [] });
         }
     },
 };

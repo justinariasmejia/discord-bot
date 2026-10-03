@@ -5,6 +5,7 @@ const { modificarHuesos, obtenerUsuario } = require('./economia');
 const { obtenerConfig, eventoActivo } = require('./evento');
 const { conBloqueo } = require('../utils/locks');
 const { ITEMS } = require('../data/items');
+const { logCompra } = require('./logger');
 
 async function comprarItem(userId, guildId, itemId, cantidad = 1) {
     const confEvento = await obtenerConfig(guildId);
