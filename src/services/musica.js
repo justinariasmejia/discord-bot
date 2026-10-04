@@ -1,6 +1,7 @@
 // src/services/musica.js
 // Gestor de colas de reproducción y control de música con Shoukaku/Lavalink.
 const { Shoukaku, Connectors } = require('shoukaku');
+const { esUrlSpotify, resolverSpotify } = require('./spotify');
 
 const colas = new Map();
 const searchCache = new Map();
@@ -66,16 +67,25 @@ function nodoDisponible() {
     }
 }
 
-// ── Búsqueda de Canciones con Fallback Inteligente ──
+// ── Búsqueda de Canciones con Spotify y Fallback Universal ──
 async function buscar(query) {
     const node = nodoDisponible();
     if (!node) {
         return { error: 'NO_NODE', loadType: 'error', data: null };
     }
 
-    const busqueda = query.trim();
+    let busqueda = query.trim();
 
-    // 1. Si es URL directa
+    // 1. Detección y resolución de enlaces de Spotify
+    if (esUrlSpotify(busqueda)) {
+        const spotData = await resolverSpotify(busqueda);
+        if (spotData && spotData.query) {
+            busqueda = spotData.query;
+            console.log(`🟢 [Spotify] Resuelto enlace a búsqueda: "${busqueda}"`);
+        }
+    }
+
+    // 2. Si es URL directa (SoundCloud, YouTube directo, stream HTTP)
     if (/^https?:\/\//i.test(busqueda)) {
         try {
             return await node.rest.resolve(busqueda);
@@ -85,7 +95,7 @@ async function buscar(query) {
         }
     }
 
-    // 2. Intentar YouTube primero (si el plugin de youtube está activo en Lavalink)
+    // 3. Probar YouTube (ytsearch:) primero (si el plugin está habilitado)
     try {
         const resYt = await node.rest.resolve(`ytsearch:${busqueda}`);
         if (resYt && resYt.loadType !== 'empty' && resYt.loadType !== 'error' && resYt.data) {
@@ -94,7 +104,7 @@ async function buscar(query) {
         }
     } catch {}
 
-    // 3. Fallback a SoundCloud
+    // 4. Fallback a SoundCloud (scsearch:)
     try {
         const resSc = await node.rest.resolve(`scsearch:${busqueda}`);
         return resSc;
