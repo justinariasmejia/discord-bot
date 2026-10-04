@@ -106,7 +106,17 @@ async function buscar(query) {
         }
     }
 
-    // 3. Probar YouTube Music (ytmsearch:) primero (rápido, sin timeouts y sin 404s)
+    // 3. Probar SoundCloud (scsearch:) primero (Ultra estable, sin bloqueos de cifrado de YouTube)
+    try {
+        const resSc = await node.rest.resolve(`scsearch:${busqueda}`);
+        if (esResultadoValido(resSc)) {
+            return resSc;
+        }
+    } catch (err) {
+        console.warn('scsearch fallo o no disponible:', err?.message || err);
+    }
+
+    // 4. Fallback a YouTube Music (ytmsearch:)
     try {
         const resYtm = await node.rest.resolve(`ytmsearch:${busqueda}`);
         if (esResultadoValido(resYtm)) {
@@ -116,24 +126,14 @@ async function buscar(query) {
         console.warn('ytmsearch fallo o no disponible:', err?.message || err);
     }
 
-    // 4. Probar YouTube estándar (ytsearch:)
+    // 5. Fallback a YouTube estándar (ytsearch:)
     try {
         const resYt = await node.rest.resolve(`ytsearch:${busqueda}`);
         if (esResultadoValido(resYt)) {
             return resYt;
         }
     } catch (err) {
-        console.warn('ytsearch fallo o no disponible:', err?.message || err);
-    }
-
-    // 5. Fallback a SoundCloud (scsearch:)
-    try {
-        const resSc = await node.rest.resolve(`scsearch:${busqueda}`);
-        if (esResultadoValido(resSc)) {
-            return resSc;
-        }
-    } catch (err) {
-        console.error('Error buscando SoundCloud:', err?.message || err);
+        console.error('Error buscando YouTube:', err?.message || err);
     }
 
     return null;
@@ -232,7 +232,14 @@ async function conectar(guildId, canalVozId, canalTextoId, shardId = 0) {
             try {
                 const node = nodoDisponible();
                 if (node) {
-                    const busquedaSC = `scsearch:${c.current.info.title} ${c.current.info.author || ''}`.trim();
+                    const tituloLimpio = (c.current.info.title || '')
+                        .replace(/\([^)]*\)/g, '')
+                        .replace(/\[[^\]]*\]/g, '')
+                        .replace(/video oficial/gi, '')
+                        .replace(/official video/gi, '')
+                        .replace(/audio oficial/gi, '')
+                        .trim();
+                    const busquedaSC = `scsearch:${tituloLimpio}`.trim();
                     console.log(`🔄 [Auto-Rescate] Intentando reproducir alternativo desde SoundCloud: "${busquedaSC}"`);
                     const resSc = await node.rest.resolve(busquedaSC);
                     if (resSc && Array.isArray(resSc.data) && resSc.data.length > 0) {
