@@ -19,6 +19,17 @@ module.exports = {
         // Inicializar el cliente del logger
         setLogClient(client);
 
+        // Sincronizar comandos slash al instante en todos los servidores
+        try {
+            const comandosData = Array.from(client.commands.values()).map((c) => c.data.toJSON());
+            for (const guild of client.guilds.cache.values()) {
+                await guild.commands.set(comandosData);
+                console.log(`⚡ Comandos slash actualizados al instante en: ${guild.name}`);
+            }
+        } catch (err) {
+            console.warn('⚠️ No se pudieron registrar comandos de servidor automáticamente:', err?.message || err);
+        }
+
         // Reembolsar apuestas y duelos pendientes tras un reinicio inesperado
         await reembolsarRondasPendientes();
         await reembolsarDuelosPendientes();
