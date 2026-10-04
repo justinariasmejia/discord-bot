@@ -221,15 +221,50 @@ async function conectar(guildId, canalVozId, canalTextoId, shardId = 0) {
         manejarFinCancion(guildId);
     });
 
-    player.on('exception', (err) => {
+    player.on('exception', async (err) => {
         console.error(`❌ Excepción en pista (servidor ${guildId}):`, err?.message || err);
         const c = obtenerCola(guildId);
-        if (c?.canalTextoId && _client) {
+        if (!c) return;
+
+        // Auto-rescate: Si la pista falló (ej. error de cifrado YouTube), intentar resolverla en SoundCloud al instante
+        if (c.current && c.current.info && !c.current._fallbackAttempted) {
+            c.current._fallbackAttempted = true;
+            try {
+                const node = nodoDisponible();
+                if (node) {
+                    const busquedaSC = `scsearch:${c.current.info.title} ${c.current.info.author || ''}`.trim();
+                    console.log(`🔄 [Auto-Rescate] Intentando reproducir alternativo desde SoundCloud: "${busquedaSC}"`);
+                    const resSc = await node.rest.resolve(busquedaSC);
+                    if (resSc && Array.isArray(resSc.data) && resSc.data.length > 0) {
+                        const nuevoTrack = resSc.data[0];
+                        nuevoTrack.requester = c.current.requester;
+                        nuevoTrack._fallbackAttempted = true;
+                        c.current = nuevoTrack;
+                        c.player.playTrack({ track: { encoded: nuevoTrack.encoded } });
+                        if (c.canalTextoId && _client) {
+                            const ch = _client.channels.cache.get(c.canalTextoId);
+                            if (ch) {
+                                const { basePremium, COLORES } = require('../utils/embeds');
+                                ch.send({
+                                    embeds: [basePremium('🔄 Fuente Alternativa', `La fuente original falló. Reproduciendo automáticamente **${nuevoTrack.info.title}** desde SoundCloud.`, COLORES.teal)],
+                                }).catch(() => {});
+                            }
+                        }
+                        return;
+                    }
+                }
+            } catch (fallbackErr) {
+                console.warn('Fallo en rescate SoundCloud:', fallbackErr?.message || fallbackErr);
+            }
+        }
+
+        // Si no se pudo rescatar
+        if (c.canalTextoId && _client) {
             const ch = _client.channels.cache.get(c.canalTextoId);
             if (ch) {
                 const { basePremium, COLORES } = require('../utils/embeds');
                 ch.send({
-                    embeds: [basePremium('⚠️ Pista no reproducible', `No se pudo reproducir **${c.current?.info?.title || 'la pista'}** (la fuente retornó error o está restringida).\n\n💡 *Tip: Puedes probar con otra canción o pegar un enlace directo de YouTube/SoundCloud.*\nSaltando a la siguiente canción...`, COLORES.rojo)],
+                    embeds: [basePremium('⚠️ Pista no reproducible', `No se pudo reproducir **${c.current?.info?.title || 'la pista'}** (la fuente retornó error o está restringida).\n\n💡 *Tip: Puedes probar con otra canción o pegar un enlace directo.*\nSaltando a la siguiente canción...`, COLORES.rojo)],
                 }).catch(() => {});
             }
         }
