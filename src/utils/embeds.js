@@ -19,21 +19,29 @@ const tiempoRelativo = (ms) => `<t:${Math.floor(ms / 1000)}:R>`;
 const tiempoCorto = (ms) => `<t:${Math.floor(ms / 1000)}:f>`;
 
 function base(titulo, descripcion, color = COLORES.naranja) {
-    return new EmbedBuilder()
+    const emb = new EmbedBuilder()
         .setColor(color)
         .setTitle(titulo)
-        .setDescription(descripcion)
         .setTimestamp()
         .setFooter({ text: '🎃 La Cripta de los Huesos • Temporada Activa', iconURL: 'https://cdn.discordapp.com/emojis/1159187838853275708.webp' });
+
+    if (descripcion && typeof descripcion === 'string' && descripcion.trim().length > 0) {
+        emb.setDescription(descripcion);
+    }
+    return emb;
 }
 
 function basePremium(titulo, descripcion, color = COLORES.naranja) {
-    return new EmbedBuilder()
+    const emb = new EmbedBuilder()
         .setColor(color)
         .setTitle(titulo)
-        .setDescription(descripcion)
         .setTimestamp()
         .setFooter({ text: '🎃 La Cripta de los Huesos', iconURL: 'https://cdn.discordapp.com/emojis/1159187838853275708.webp' });
+
+    if (descripcion && typeof descripcion === 'string' && descripcion.trim().length > 0) {
+        emb.setDescription(descripcion);
+    }
+    return emb;
 }
 
 const embedError = (descripcion) => base('💀 Algo salió mal', descripcion, COLORES.rojo);

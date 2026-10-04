@@ -2,14 +2,14 @@
 // Gestor de colas de reproducción y control de música con Shoukaku/Lavalink.
 const { Shoukaku, Connectors } = require('shoukaku');
 
-// Mapa de colas por servidor: Map<guildId, QueueObject>
 const colas = new Map();
-// Cache temporal para búsquedas interactivas: Map<searchId, { tracks, userId, timeout }>
 const searchCache = new Map();
 
 let _shoukaku = null;
+let _client = null;
 
 function inicializarShoukaku(client) {
+    _client = client;
     const host = process.env.LAVALINK_HOST || 'miami2.visihost.in:2691';
     const auth = process.env.LAVALINK_PASSWORD || 'youshallnotpass';
     const secure = process.env.LAVALINK_SECURE === 'true';
@@ -24,7 +24,7 @@ function inicializarShoukaku(client) {
     try {
         _shoukaku = new Shoukaku(new Connectors.DiscordJS(client), nodos, {
             moveOnDisconnect: false,
-            reconnectTries: Infinity, // Reconexión automática indefinida
+            reconnectTries: Infinity,
             reconnectInterval: 5000,
             restTimeout: 15000,
         });
@@ -42,7 +42,7 @@ function inicializarShoukaku(client) {
         });
 
         _shoukaku.on('disconnect', (name, count) => {
-            console.warn(`⚠️ [Lavalink] Nodo "${name}" desconectado. Reintentando...`);
+            console.warn(`⚠️ [Lavalink] Nodo "${name}" desconectado. Reintentando (#${count})...`);
         });
 
         client.shoukaku = _shoukaku;
@@ -66,36 +66,51 @@ function nodoDisponible() {
     }
 }
 
-// ── Búsqueda de Canciones ──
+// ── Búsqueda de Canciones con Fallback Inteligente ──
 async function buscar(query) {
     const node = nodoDisponible();
     if (!node) {
         return { error: 'NO_NODE', loadType: 'error', data: null };
     }
 
-    let busqueda = query.trim();
-    if (!/^https?:\/\//i.test(busqueda)) {
-        // Usar búsqueda de SoundCloud por defecto (no tiene bloqueos estrictos de IP)
-        busqueda = `scsearch:${busqueda}`;
+    const busqueda = query.trim();
+
+    // 1. Si es URL directa
+    if (/^https?:\/\//i.test(busqueda)) {
+        try {
+            return await node.rest.resolve(busqueda);
+        } catch (err) {
+            console.error('Error buscando URL:', err?.message || err);
+            return null;
+        }
     }
 
+    // 2. Intentar YouTube primero (si el plugin de youtube está activo en Lavalink)
     try {
-        const resultado = await node.rest.resolve(busqueda);
-        return resultado;
+        const resYt = await node.rest.resolve(`ytsearch:${busqueda}`);
+        if (resYt && resYt.loadType !== 'empty' && resYt.loadType !== 'error' && resYt.data) {
+            const tracks = Array.isArray(resYt.data) ? resYt.data : [resYt.data];
+            if (tracks.length > 0) return resYt;
+        }
+    } catch {}
+
+    // 3. Fallback a SoundCloud
+    try {
+        const resSc = await node.rest.resolve(`scsearch:${busqueda}`);
+        return resSc;
     } catch (err) {
-        console.error('Error buscando canción:', err?.message || err);
+        console.error('Error buscando SoundCloud:', err?.message || err);
         return null;
     }
 }
 
-// ── Manejo de Cache de Búsqueda Interactiva ──
 function guardarBusqueda(searchId, tracks, userId) {
     if (searchCache.has(searchId)) {
         clearTimeout(searchCache.get(searchId).timeout);
     }
     const timeout = setTimeout(() => {
         searchCache.delete(searchId);
-    }, 120000); // 2 minutos
+    }, 120000);
 
     searchCache.set(searchId, { tracks, userId, timeout });
 }
@@ -111,7 +126,6 @@ function limpiarBusqueda(searchId) {
     }
 }
 
-// ── Gestión de Colas ──
 function obtenerCola(guildId) {
     return colas.get(guildId) || null;
 }
@@ -124,7 +138,7 @@ function crearCola(guildId, player, canalTextoId, canalVozId) {
         current: null,
         canalTextoId,
         canalVozId,
-        loop: 'off', // 'off' | 'track' | 'queue'
+        loop: 'off',
         volume: 80,
         volumenAnterior: 80,
         paused: false,
@@ -142,7 +156,6 @@ function eliminarCola(guildId) {
     colas.delete(guildId);
 }
 
-// ── Conexión a Voz ──
 async function conectar(guildId, canalVozId, canalTextoId, shardId = 0) {
     const node = nodoDisponible();
     if (!node) throw new Error('No hay nodos Lavalink disponibles.');
@@ -175,6 +188,16 @@ async function conectar(guildId, canalVozId, canalTextoId, shardId = 0) {
 
     player.on('exception', (err) => {
         console.error(`❌ Excepción en pista (servidor ${guildId}):`, err?.message || err);
+        const c = obtenerCola(guildId);
+        if (c?.canalTextoId && _client) {
+            const ch = _client.channels.cache.get(c.canalTextoId);
+            if (ch) {
+                const { basePremium, COLORES } = require('../utils/embeds');
+                ch.send({
+                    embeds: [basePremium('⚠️ Pista no reproducible', `No se pudo reproducir **${c.current?.info?.title || 'la pista'}** (la fuente retornó error o está restringida).\n\n💡 *Tip: Puedes probar con otra canción o pegar un enlace directo de YouTube/SoundCloud.*\nSaltando a la siguiente canción...`, COLORES.rojo)],
+                }).catch(() => {});
+            }
+        }
         manejarFinCancion(guildId);
     });
 
@@ -185,23 +208,19 @@ async function conectar(guildId, canalVozId, canalTextoId, shardId = 0) {
     return cola;
 }
 
-// ── Avance Automático de Pistas ──
 function manejarFinCancion(guildId) {
     const cola = obtenerCola(guildId);
     if (!cola) return;
 
-    // Loop de una canción
     if (cola.loop === 'track' && cola.current) {
         cola.player.playTrack({ track: { encoded: cola.current.encoded } });
         return;
     }
 
-    // Loop de toda la cola
     if (cola.loop === 'queue' && cola.current) {
         cola.tracks.push(cola.current);
     }
 
-    // Siguiente pista
     if (cola.tracks.length > 0) {
         const siguiente = cola.tracks.shift();
         cola.current = siguiente;
@@ -214,11 +233,10 @@ function manejarFinCancion(guildId) {
             if (c && !c.current && c.tracks.length === 0) {
                 desconectar(guildId);
             }
-        }, 120000); // 2 minutos
+        }, 120000);
     }
 }
 
-// ── Métodos de Reproducción ──
 function reproducir(guildId, track) {
     const cola = obtenerCola(guildId);
     if (!cola) return false;
@@ -348,7 +366,6 @@ function vaciarCola(guildId) {
     return total;
 }
 
-// ── Formateo de Tiempo y Barra de Progreso ──
 function formatearDuracion(ms) {
     if (!ms || ms <= 0) return '🔴 En vivo';
     const seg = Math.floor(ms / 1000);

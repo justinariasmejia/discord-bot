@@ -6,7 +6,6 @@ const {
 } = require('discord.js');
 const {
     buscar,
-    guardarBusqueda,
     obtenerCola,
     conectar,
     reproducir,
@@ -21,7 +20,7 @@ const {
     vaciarCola,
     formatearDuracion,
 } = require('../services/musica');
-const { panelNowPlaying, panelBusqueda, panelCola } = require('../utils/paneles-musica');
+const { panelNowPlaying, panelCola } = require('../utils/paneles-musica');
 const { basePremium, COLORES } = require('../utils/embeds');
 
 module.exports = {
@@ -31,14 +30,8 @@ module.exports = {
         .addSubcommand((sub) =>
             sub
                 .setName('play')
-                .setDescription('Reproduce una canción, busca interactivamente o agrega una URL')
+                .setDescription('Reproduce directamente una canción o enlace')
                 .addStringOption((opt) => opt.setName('busqueda').setDescription('Nombre de la canción o enlace').setRequired(true))
-        )
-        .addSubcommand((sub) =>
-            sub
-                .setName('search')
-                .setDescription('Búsqueda interactiva con menú de selección de hasta 10 canciones')
-                .addStringOption((opt) => opt.setName('busqueda').setDescription('Título o artista a buscar').setRequired(true))
         )
         .addSubcommand((sub) => sub.setName('skip').setDescription('Salta a la siguiente canción'))
         .addSubcommand((sub) => sub.setName('stop').setDescription('Detiene la música y desconecta el bot'))
@@ -67,8 +60,8 @@ module.exports = {
         const guildId = interaction.guildId;
         const miembro = interaction.member;
 
-        // ══════ 1. PLAY & SEARCH ══════
-        if (sub === 'play' || sub === 'search') {
+        // ══════ 1. PLAY (Búsqueda Directa Instantánea) ══════
+        if (sub === 'play') {
             const query = interaction.options.getString('busqueda');
             const canalVoz = miembro.voice?.channel;
 
@@ -85,13 +78,13 @@ module.exports = {
 
             if (!resultado || !resultado.data) {
                 return interaction.editReply({
-                    embeds: [basePremium('🔍 Sin Resultados', `No se encontró nada para: **${query}**\n\n💡 Intenta con un nombre más específico o una URL directa.`, COLORES.rojo)],
+                    embeds: [basePremium('🔍 Sin Resultados', `No se encontró ninguna canción para: **${query}**\n\n💡 Prueba con otro título o pega un enlace directo.`, COLORES.rojo)],
                 });
             }
 
             if (resultado.error === 'NO_NODE') {
                 return interaction.editReply({
-                    embeds: [basePremium('⚠️ Servidor de Música no Disponible', 'El nodo Lavalink se está conectando o iniciando. Por favor inténtalo en unos momentos.', COLORES.naranja)],
+                    embeds: [basePremium('⚠️ Servidor de Música no Disponible', 'El nodo Lavalink se está conectando. Por favor inténtalo en unos segundos.', COLORES.naranja)],
                 });
             }
 
@@ -115,24 +108,7 @@ module.exports = {
                 });
             }
 
-            // Asignar requester
-            const requester = {
-                id: interaction.user.id,
-                tag: interaction.user.tag,
-                avatar: interaction.user.displayAvatarURL(),
-            };
-
-            // ── Búsqueda Interactiva con Select Menu ──
-            // Si el usuario usó /musica search O si usó /musica play con texto libre y hay múltiples resultados
-            const esUrl = /^https?:\/\//i.test(query.trim());
-            if ((sub === 'search' || (sub === 'play' && !esUrl && tracks.length > 1))) {
-                const searchId = `s_${Date.now()}_${interaction.user.id}`;
-                const topTracks = tracks.slice(0, 10);
-                guardarBusqueda(searchId, topTracks, interaction.user.id);
-                return interaction.editReply(panelBusqueda(searchId, query, topTracks, interaction.user.id));
-            }
-
-            // ── Reproducción Directa (URL, Playlist o 1 solo resultado) ──
+            // Conectar a voz si el bot no está conectado
             let cola = obtenerCola(guildId);
             if (!cola) {
                 try {
@@ -145,33 +121,44 @@ module.exports = {
                 }
             }
 
+            const requester = {
+                id: interaction.user.id,
+                tag: interaction.user.tag,
+                avatar: interaction.user.displayAvatarURL(),
+            };
+
             const yaSonando = !!cola.current;
 
-            for (const t of tracks) {
+            // Búsqueda directa: Si es playlist agrega todas, si es búsqueda agrega la primera
+            const cancionesAñadir = esPlaylist ? tracks : [tracks[0]];
+
+            for (const t of cancionesAñadir) {
                 t.requester = requester;
                 reproducir(guildId, t);
             }
 
             if (esPlaylist) {
-                const embed = basePremium('📋 Playlist Añadida', `**${nombrePlaylist}**\n\n🎵 **${tracks.length}** canciones añadidas a la cola.\n📝 Cola total: **${cola.tracks.length}** canciones.`, COLORES.teal);
+                const embed = basePremium('📋 Playlist Añadida', `**${nombrePlaylist}**\n\n🎵 **${cancionesAñadir.length}** canciones añadidas a la cola.\n📝 Cola total: **${cola.tracks.length}** canciones.`, COLORES.teal);
                 return interaction.editReply({ embeds: [embed] });
             }
 
-            const track = tracks[0];
+            const track = cancionesAñadir[0];
             const info = track.info;
 
+            // Si ya estaba sonando otra canción, notificar que se agregó a la cola
             if (yaSonando) {
-                const embed = basePremium('➕ Añadida a la Cola', '', COLORES.verde)
+                const embed = basePremium('➕ Añadida a la Cola', `Se añadió exitosamente a la lista de reproducción.`, COLORES.verde)
                     .addFields(
                         { name: '🎵 Canción', value: `[${info.title}](${info.uri})`, inline: false },
                         { name: '👤 Artista', value: info.author || 'Desconocido', inline: true },
                         { name: '⏱️ Duración', value: formatearDuracion(info.length), inline: true },
-                        { name: '#️⃣ Posición', value: `#${cola.tracks.length}`, inline: true }
+                        { name: '#️⃣ Posición en Cola', value: `#${cola.tracks.length}`, inline: true }
                     );
                 if (info.artworkUrl) embed.setThumbnail(info.artworkUrl);
                 return interaction.editReply({ embeds: [embed] });
             }
 
+            // Si es la primera canción, mostrar el reproductor interactivo con controles
             return interaction.editReply(panelNowPlaying(cola, interaction.user.id));
         }
 
@@ -239,7 +226,7 @@ module.exports = {
             const cola = obtenerCola(guildId);
             if (!cola || (!cola.current && cola.tracks.length === 0)) {
                 return interaction.reply({
-                    embeds: [basePremium('📋 Cola Vacía', 'No hay canciones en la cola.\n\nUsa `/musica play` o `/musica search` para agregar canciones.', COLORES.morado)],
+                    embeds: [basePremium('📋 Cola Vacía', 'No hay canciones en la cola.\n\nUsa `/musica play` para agregar canciones.', COLORES.morado)],
                     flags: MessageFlags.Ephemeral,
                 });
             }
