@@ -34,8 +34,9 @@ module.exports = {
                 if (!handler) return;
 
                 // Solo quien abrió el panel puede usar sus botones
+                const prefijo = partes[0];
                 const dueno = partes[2];
-                if (dueno && /^\d+$/.test(dueno) && dueno !== interaction.user.id) {
+                if (prefijo !== 'musica' && dueno && /^\d+$/.test(dueno) && dueno !== interaction.user.id) {
                     return interaction.reply({
                         content: '🔒 Este panel no es tuyo. Usa `/cripta` para abrir el tuyo.',
                         flags: MessageFlags.Ephemeral,

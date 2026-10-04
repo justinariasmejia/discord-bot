@@ -3,12 +3,18 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const { conectarDB } = require('./src/database');
 const { cargarComandos, cargarInteracciones, cargarEventos } = require('./src/loader');
+const { inicializarShoukaku } = require('./src/services/musica');
 
 // ─── Que el bot nunca se caiga por un error suelto ───
 process.on('unhandledRejection', (error) => console.error('⚠️ unhandledRejection:', error));
 process.on('uncaughtException', (error) => console.error('⚠️ uncaughtException:', error));
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildVoiceStates,
+    ],
+});
 client.commands = new Collection();       // slash commands por nombre
 client.interacciones = new Collection();  // botones/selects/modales por prefijo de customId
 
@@ -24,6 +30,9 @@ client.interacciones = new Collection();  // botones/selects/modales por prefijo
     cargarComandos(client);
     cargarInteracciones(client);
     cargarEventos(client);
+
+    // Inicializar Shoukaku para el sistema de música
+    inicializarShoukaku(client);
 
     await client.login(process.env.DISCORD_TOKEN);
 })();
