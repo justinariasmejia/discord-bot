@@ -76,15 +76,15 @@ module.exports = {
 
             const resultado = await buscar(query);
 
-            if (!resultado || !resultado.data) {
+            if (resultado && resultado.error === 'NO_NODE') {
                 return interaction.editReply({
-                    embeds: [basePremium('🔍 Sin Resultados', `No se encontró ninguna canción para: **${query}**\n\n💡 Prueba con otro título o pega un enlace directo.`, COLORES.rojo)],
+                    embeds: [basePremium('⚠️ Servidor de Música no Disponible', 'El servidor de música (Lavalink) se está conectando. Por favor inténtalo en unos segundos.', COLORES.naranja)],
                 });
             }
 
-            if (resultado.error === 'NO_NODE') {
+            if (!resultado || !resultado.data) {
                 return interaction.editReply({
-                    embeds: [basePremium('⚠️ Servidor de Música no Disponible', 'El nodo Lavalink se está conectando. Por favor inténtalo en unos segundos.', COLORES.naranja)],
+                    embeds: [basePremium('🔍 Sin Resultados', `No se encontró ninguna canción para: **${query}**\n\n💡 Tip: Intenta con un nombre más específico o pega un enlace directo.`, COLORES.rojo)],
                 });
             }
 

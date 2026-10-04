@@ -67,7 +67,14 @@ function nodoDisponible() {
     }
 }
 
-// ── Búsqueda de Canciones con Spotify y Fallback Universal ──
+function esResultadoValido(res) {
+    if (!res || !res.data) return false;
+    if (res.loadType === 'empty' || res.loadType === 'error') return false;
+    if (Array.isArray(res.data) && res.data.length === 0) return false;
+    return true;
+}
+
+// ── Búsqueda de Canciones (Spotify -> YouTube Music -> YouTube -> SoundCloud) ──
 async function buscar(query) {
     const node = nodoDisponible();
     if (!node) {
@@ -78,40 +85,58 @@ async function buscar(query) {
 
     // 1. Detección y resolución de enlaces de Spotify
     if (esUrlSpotify(busqueda)) {
-        const spotData = await resolverSpotify(busqueda);
-        if (spotData && spotData.query) {
-            busqueda = spotData.query;
-            console.log(`🟢 [Spotify] Resuelto enlace a búsqueda: "${busqueda}"`);
+        try {
+            const spotData = await resolverSpotify(busqueda);
+            if (spotData && spotData.query) {
+                console.log(`🟢 [Spotify] Resuelto enlace a búsqueda: "${spotData.query}"`);
+                busqueda = spotData.query;
+            }
+        } catch (e) {
+            console.error('Error resolviendo Spotify:', e);
         }
     }
 
     // 2. Si es URL directa (SoundCloud, YouTube directo, stream HTTP)
     if (/^https?:\/\//i.test(busqueda)) {
         try {
-            return await node.rest.resolve(busqueda);
+            const resUrl = await node.rest.resolve(busqueda);
+            if (esResultadoValido(resUrl)) return resUrl;
         } catch (err) {
             console.error('Error buscando URL:', err?.message || err);
-            return null;
         }
     }
 
-    // 3. Probar YouTube (ytsearch:) primero (si el plugin está habilitado)
+    // 3. Probar YouTube Music (ytmsearch:) primero (rápido, sin timeouts y sin 404s)
+    try {
+        const resYtm = await node.rest.resolve(`ytmsearch:${busqueda}`);
+        if (esResultadoValido(resYtm)) {
+            return resYtm;
+        }
+    } catch (err) {
+        console.warn('ytmsearch fallo o no disponible:', err?.message || err);
+    }
+
+    // 4. Probar YouTube estándar (ytsearch:)
     try {
         const resYt = await node.rest.resolve(`ytsearch:${busqueda}`);
-        if (resYt && resYt.loadType !== 'empty' && resYt.loadType !== 'error' && resYt.data) {
-            const tracks = Array.isArray(resYt.data) ? resYt.data : [resYt.data];
-            if (tracks.length > 0) return resYt;
+        if (esResultadoValido(resYt)) {
+            return resYt;
         }
-    } catch {}
+    } catch (err) {
+        console.warn('ytsearch fallo o no disponible:', err?.message || err);
+    }
 
-    // 4. Fallback a SoundCloud (scsearch:)
+    // 5. Fallback a SoundCloud (scsearch:)
     try {
         const resSc = await node.rest.resolve(`scsearch:${busqueda}`);
-        return resSc;
+        if (esResultadoValido(resSc)) {
+            return resSc;
+        }
     } catch (err) {
         console.error('Error buscando SoundCloud:', err?.message || err);
-        return null;
     }
+
+    return null;
 }
 
 function guardarBusqueda(searchId, tracks, userId) {
