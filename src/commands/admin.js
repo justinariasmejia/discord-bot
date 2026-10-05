@@ -82,6 +82,12 @@ module.exports = {
                 .setDescription('Canal para anuncios de administración')
                 .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
         )
+        .addSubcommand((sub) =>
+            sub
+                .setName('canal_musica')
+                .setDescription('Canal dedicado para el reproductor interactivo en vivo')
+                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
+        )
         // ── Ver Configuración Actual ──
         .addSubcommand((sub) =>
             sub
@@ -297,6 +303,16 @@ module.exports = {
             await logAdmin(guildId, interaction.user.id, 'Canal Logs', `Configurado: <#${canal.id}>`);
             const embed = basePremium('✅ Canal de Logs Configurado', `Todas las acciones (caza, apuestas, robos, duelos, compras, admin) se registrarán en <#${canal.id}>.`, COLORES.verde);
             return interaction.editReply({ embeds: [embed] });
+        }
+
+        if (sub === 'canal_musica') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const canal = interaction.options.getChannel('canal');
+            const { configurarCanalMusica } = require('../services/canalMusica');
+            await configurarCanalMusica(interaction.guildId, canal.id, client);
+            return interaction.editReply({
+                embeds: [basePremium('✅ Canal de Música Configurado', `El reproductor maestro en vivo ha sido fijado en ${canal}.`, COLORES.verde)],
+            });
         }
 
         if (sub === 'canal_anuncios') {

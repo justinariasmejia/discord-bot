@@ -1,5 +1,5 @@
 // src/utils/paneles-musica.js
-// Paneles visuales interactivos y profesionales para el sistema de música.
+// Paneles visuales interactivos, ultra-minimalistas y profesionales para el sistema de música.
 const {
     ActionRowBuilder,
     ButtonBuilder,
@@ -7,65 +7,96 @@ const {
     StringSelectMenuBuilder,
 } = require('discord.js');
 const { basePremium, COLORES } = require('./embeds');
-const { formatearDuracion, barraProgreso } = require('../services/musica');
+const { formatearDuracion } = require('../services/musica');
 
-// ── Panel Now Playing (Reproductor Interactivo) ──
+// ── Panel Standby Minimalista (Cuando no hay música sonando) ──
+function panelEsperaMusica() {
+    const desc = 
+        '### 🎧 No hay música sonando\n' +
+        '> Escribe el **nombre de una canción** o pega un **enlace** aquí abajo para reproducir.\n\n' +
+        '⚡ **Fuentes:** `YouTube` • `Spotify` • `SoundCloud`\n' +
+        '🎮 **Comandos:** `/play`, `/skip`, `/queue`, `/stop`';
+
+    const embed = basePremium('🎵 Reproductor • La Cripta', desc, COLORES.morado);
+    embed.setFooter({ text: '🎃 La Cripta de los Huesos • Sistema de Audio' });
+
+    const fila1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('musica:pause_resume:all').setLabel('Pausar/Reanudar').setEmoji('⏯️').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        new ButtonBuilder().setCustomId('musica:skip:all').setLabel('Saltar').setEmoji('⏭️').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        new ButtonBuilder().setCustomId('musica:stop:all').setLabel('Detener').setEmoji('⏹️').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        new ButtonBuilder().setCustomId('musica:loop:all').setLabel('Loop').setEmoji('🔁').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        new ButtonBuilder().setCustomId('musica:shuffle:all').setLabel('Mezclar').setEmoji('🔀').setStyle(ButtonStyle.Secondary).setDisabled(true)
+    );
+
+    const fila2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('musica:vol_down:all').setLabel('-10%').setEmoji('🔉').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        new ButtonBuilder().setCustomId('musica:vol_up:all').setLabel('+10%').setEmoji('🔊').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        new ButtonBuilder().setCustomId('musica:mute:all').setLabel('Mute').setEmoji('🔇').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        new ButtonBuilder().setCustomId('musica:queue:all:0').setLabel('Cola (0)').setEmoji('📋').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        new ButtonBuilder().setCustomId('musica:np_refresh:all').setLabel('Refrescar').setEmoji('🔄').setStyle(ButtonStyle.Secondary)
+    );
+
+    return { embeds: [embed], components: [fila1, fila2] };
+}
+
+// ── Panel Now Playing Minimalista con Imagen Grande y Sin Barra de Progreso ──
 function panelNowPlaying(cola, userId) {
     const track = cola?.current;
     if (!track) {
-        return {
-            embeds: [basePremium('🔇 Sin Reproducción', 'No hay ninguna canción sonando en este momento.\n\nUsa `/musica play` para iniciar la fiesta.', COLORES.morado)],
-            components: [],
-        };
+        return panelEsperaMusica();
     }
 
     const info = track.info;
-    const posicion = cola.player?.position || 0;
-    const barra = barraProgreso(posicion, info.length);
-    const durActual = formatearDuracion(posicion);
     const durTotal = formatearDuracion(info.length);
-
     const loopTexto = cola.loop === 'track' ? '🔂 Canción' : cola.loop === 'queue' ? '🔁 Cola' : 'Off';
-    const statusEmoji = cola.paused ? '⏸️' : '▶️';
     const volEmoji = cola.volume === 0 ? '🔇' : cola.volume < 50 ? '🔉' : '🔊';
+    const requesterTag = track.requester?.id ? `<@${track.requester.id}>` : (track.requester?.tag || 'Mortal');
 
-    const embed = basePremium(
-        '🎵 Reproduciendo Ahora • La Cripta',
-        '> *Controla la reproducción con los botones inferiores.*',
-        COLORES.morado
-    ).addFields(
-        { name: '🎶 Canción', value: `[${info.title}](${info.uri})`, inline: false },
-        { name: '👤 Artista', value: info.author || 'Desconocido', inline: true },
-        { name: '⏱️ Duración', value: `${durActual} / ${durTotal}`, inline: true },
-        { name: `${volEmoji} Volumen`, value: `${cola.volume}%`, inline: true },
-        {
-            name: '━━━ Progreso ━━━',
-            value: `${statusEmoji} ${barra}\n` +
-                   `**${durActual}** ▬▬▬▬▬▬▬▬▬▬▬▬ **${durTotal}** • Loop: **${loopTexto}**`,
-            inline: false,
+    // ── Descripción Minimalista y Elegante (Sin barra de progreso) ──
+    const desc = 
+        `### [${info.title}](${info.uri})\n` +
+        `👤 **Artista:** \`${info.author || 'Desconocido'}\`\n` +
+        `⏱️ **Duración:** \`${durTotal}\`  •  ${volEmoji} **Volumen:** \`${cola.volume}%\`  •  🔁 **Loop:** \`${loopTexto}\`\n` +
+        `🎧 **Pedida por:** ${requesterTag}`;
+
+    const embed = basePremium('🎵 Reproduciendo Ahora', desc, COLORES.morado);
+
+    // ── IMAGEN EN GRANDE (Full Width Banner) ──
+    if (info.artworkUrl) {
+        let imgGrande = info.artworkUrl;
+        if (imgGrande.includes('hqdefault.jpg')) {
+            imgGrande = imgGrande.replace('hqdefault.jpg', 'maxresdefault.jpg');
         }
-    );
+        embed.setImage(imgGrande);
+    }
 
-    if (cola.tracks.length > 0) {
-        const prox = cola.tracks[0].info;
+    // ── LISTA DE ESPERA EN VIVO (Minimalista) ──
+    if (cola.tracks && cola.tracks.length > 0) {
+        const maxVista = 5;
+        const listaItems = cola.tracks.slice(0, maxVista).map((t, idx) => {
+            const req = t.requester?.id ? `<@${t.requester.id}>` : (t.requester?.tag || 'Mortal');
+            const dur = formatearDuracion(t.info.length);
+            const titulo = t.info.title.length > 40 ? t.info.title.slice(0, 38) + '...' : t.info.title;
+            return `\`#${idx + 1}\` [${titulo}](${t.info.uri}) \`[${dur}]\` • ${req}`;
+        }).join('\n');
+
+        let extra = '';
+        if (cola.tracks.length > maxVista) {
+            extra = `\n*(+ ${cola.tracks.length - maxVista} más en espera. Usa \`/queue\` para ver todas)*`;
+        }
+
         embed.addFields({
-            name: '⏭️ Siguiente en Cola',
-            value: `[${prox.title.slice(0, 55)}](${prox.uri}) — ` +
-                   `*${prox.author.slice(0, 25)}* [${formatearDuracion(prox.length)}]\n` +
-                   `*(+${cola.tracks.length} canción${cola.tracks.length > 1 ? 'es' : ''} más)*`,
+            name: `📜 Lista de Espera (${cola.tracks.length})`,
+            value: listaItems + extra,
             inline: false,
         });
     }
 
     if (track.requester) {
         embed.setFooter({
-            text: `Pedido por: ${track.requester.tag || 'Mortal de la Cripta'}`,
+            text: `La Cripta • Pedida por: ${track.requester.tag || 'Mortal'}`,
             iconURL: track.requester.avatar || undefined,
         });
-    }
-
-    if (info.artworkUrl) {
-        embed.setThumbnail(info.artworkUrl);
     }
 
     const fila1 = new ActionRowBuilder().addComponents(
@@ -94,7 +125,7 @@ function panelNowPlaying(cola, userId) {
             .setLabel('Mezclar')
             .setEmoji('🔀')
             .setStyle(ButtonStyle.Secondary)
-            .setDisabled(cola.tracks.length < 2)
+            .setDisabled(cola.tracks ? cola.tracks.length < 2 : true)
     );
 
     const fila2 = new ActionRowBuilder().addComponents(
@@ -115,7 +146,7 @@ function panelNowPlaying(cola, userId) {
             .setStyle(cola.volume === 0 ? ButtonStyle.Danger : ButtonStyle.Secondary),
         new ButtonBuilder()
             .setCustomId('musica:queue:all:0')
-            .setLabel(`Cola (${cola.tracks.length})`)
+            .setLabel(`Cola (${cola.tracks ? cola.tracks.length : 0})`)
             .setEmoji('📋')
             .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
@@ -127,7 +158,8 @@ function panelNowPlaying(cola, userId) {
 
     const components = [fila1, fila2];
 
-    if (cola.tracks.length > 0) {
+    // Fila 3: Salto directo con Select Menu
+    if (cola.tracks && cola.tracks.length > 0) {
         const opcionesSalto = cola.tracks.slice(0, 5).map((t, idx) => ({
             label: `#${idx + 1} ${t.info.title.slice(0, 80)}`,
             description: `${(t.info.author || 'Desconocido').slice(0, 40)} • [${formatearDuracion(t.info.length)}]`,
@@ -147,10 +179,10 @@ function panelNowPlaying(cola, userId) {
     return { embeds: [embed], components };
 }
 
-// ── Panel de Cola Interactiva con Paginación y Eliminación Rápida ──
+// ── Panel de Cola Interactiva con Paginación ──
 function panelCola(cola, userId, pagina = 0) {
     const porPagina = 8;
-    const totalPaginas = Math.max(1, Math.ceil(cola.tracks.length / porPagina));
+    const totalPaginas = Math.max(1, Math.ceil((cola.tracks?.length || 0) / porPagina));
     pagina = Math.max(0, Math.min(pagina, totalPaginas - 1));
 
     let desc = '';
@@ -160,31 +192,32 @@ function panelCola(cola, userId, pagina = 0) {
         const dur = formatearDuracion(info.length);
         desc += '🎵 **Sonando ahora:**\n';
         desc += `[${info.title}](${info.uri})\n` +
-                `👤 *${info.author || 'Desconocido'}* • ⏱️ **${dur}**\n\n`;
+                `👤 *${info.author || 'Desconocido'}* • ⏱️ \`${dur}\`\n\n`;
     }
 
     desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
     const inicio = pagina * porPagina;
-    const fin = Math.min(inicio + porPagina, cola.tracks.length);
-    const pistasPagina = cola.tracks.slice(inicio, fin);
+    const fin = Math.min(inicio + porPagina, cola.tracks?.length || 0);
+    const pistasPagina = (cola.tracks || []).slice(inicio, fin);
 
-    if (cola.tracks.length === 0) {
-        desc += '\n*La cola está vacía. Usa* `/musica play` *para agregar canciones.*\n';
+    if (!cola.tracks || cola.tracks.length === 0) {
+        desc += '\n*La cola está vacía. Escribe una canción para agregarla.*\n';
     } else {
         pistasPagina.forEach((t, i) => {
             const num = inicio + i + 1;
+            const req = t.requester?.id ? `<@${t.requester.id}>` : (t.requester?.tag || 'Mortal');
             desc += `**${num}.** [${t.info.title.slice(0, 50)}](${t.info.uri})\n` +
-                    `   👤 *${(t.info.author || 'Desconocido').slice(0, 25)}* • ⏱️ **${formatearDuracion(t.info.length)}**\n`;
+                    `   👤 *${(t.info.author || 'Desconocido').slice(0, 25)}* • ⏱️ **${formatearDuracion(t.info.length)}** • Por: ${req}\n`;
         });
     }
 
     desc += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
 
-    const durTotal = cola.tracks.reduce((acc, t) => acc + (t.info.length || 0), 0);
+    const durTotal = (cola.tracks || []).reduce((acc, t) => acc + (t.info.length || 0), 0);
     const loopTexto = cola.loop === 'off' ? 'Off' : cola.loop === 'track' ? '🔂 Canción' : '🔁 Cola';
 
-    desc += `\n\n📊 **${cola.tracks.length}** en cola • ⏱️ **${formatearDuracion(durTotal)}** total\n` +
+    desc += `\n\n📊 **${cola.tracks?.length || 0}** en cola • ⏱️ **${formatearDuracion(durTotal)}** total\n` +
             `🔄 Loop: **${loopTexto}** • 🔊 Volumen: **${cola.volume}%**`;
 
     const embed = basePremium(`📋 Cola de Reproducción • Pág. ${pagina + 1}/${totalPaginas}`, desc, COLORES.azul);
@@ -210,13 +243,13 @@ function panelCola(cola, userId, pagina = 0) {
             .setLabel('Mezclar')
             .setEmoji('🔀')
             .setStyle(ButtonStyle.Secondary)
-            .setDisabled(cola.tracks.length < 2),
+            .setDisabled((cola.tracks?.length || 0) < 2),
         new ButtonBuilder()
             .setCustomId('musica:clear_queue:all')
             .setLabel('Vaciar')
             .setEmoji('🧹')
             .setStyle(ButtonStyle.Danger)
-            .setDisabled(cola.tracks.length === 0)
+            .setDisabled((cola.tracks?.length || 0) === 0)
     );
 
     const components = [fila1];
@@ -245,6 +278,7 @@ function panelCola(cola, userId, pagina = 0) {
 }
 
 module.exports = {
+    panelEsperaMusica,
     panelNowPlaying,
     panelCola,
 };

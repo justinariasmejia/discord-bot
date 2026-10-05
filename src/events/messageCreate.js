@@ -1,5 +1,5 @@
 // src/events/messageCreate.js
-// Manejador de comandos tradicionales por texto/prefijo (en!p, !enp, en!play, etc.)
+// Manejador de comandos de texto y pedidos directos en el canal dedicado de música.
 const {
     buscar,
     obtenerCola,
@@ -16,6 +16,7 @@ const {
 } = require('../services/musica');
 const { panelNowPlaying, panelCola } = require('../utils/paneles-musica');
 const { basePremium, COLORES } = require('../utils/embeds');
+const { esCanalMusicaDedicado, procesarMensajeCanalMusica } = require('../services/canalMusica');
 
 module.exports = {
     name: 'messageCreate',
@@ -24,30 +25,60 @@ module.exports = {
         try {
             if (message.author.bot || !message.guild) return;
 
-            const contenido = message.content?.trim() || '';
+            const guildId = message.guild.id;
 
-            // Si el contenido está vacío pero no es bot, Message Content Intent está desactivado en el portal
+            // ── 1. CANAL DEDICADO DE MÚSICA (Escribe directo sin /play) ──
+            if (esCanalMusicaDedicado(guildId, message.channel.id)) {
+                return await procesarMensajeCanalMusica(message, client);
+            }
+
+            let contenido = message.content?.trim() || '';
+
+            // Si el contenido está vacío pero recibimos el evento (Message Content Intent)
             if (!contenido) {
-                console.warn('⚠️ [messageCreate] Mensaje recibido pero message.content está VACÍO. Verifica que MESSAGE CONTENT INTENT esté activado en Discord Developer Portal -> Bot -> Privileged Gateway Intents.');
+                if (message.mentions.has(client.user)) {
+                    message.channel.send({
+                        embeds: [basePremium(
+                            '👋 ¡Hola! Soy el Bot de Música y Comunidad',
+                            'Puedes usar directamente los **comandos slash**:\n\n' +
+                            '• `/play <cancion>` — Reproduce música (YouTube, Spotify, SoundCloud)\n' +
+                            '• `/skip` — Salta a la siguiente canción\n' +
+                            '• `/stop` — Detiene la música\n' +
+                            '• `/queue` — Ver la lista de espera\n' +
+                            '• `/setup-musica` — Crea un canal dedicado para pedir canciones solo escribiendo el nombre.\n\n' +
+                            '💡 *Tip: Si prefieres comandos con prefijo como `!play`, activa MESSAGE CONTENT INTENT en Discord Developer Portal.*',
+                            COLORES.morado
+                        )],
+                    }).catch(() => {});
+                }
                 return;
+            }
+
+            // Manejo de mención como prefijo (@Bot play cancion)
+            const botMention = `<@${client.user.id}>`;
+            const botMentionNick = `<@!${client.user.id}>`;
+            if (contenido.startsWith(botMention)) {
+                contenido = contenido.slice(botMention.length).trim();
+            } else if (contenido.startsWith(botMentionNick)) {
+                contenido = contenido.slice(botMentionNick.length).trim();
             }
 
             const lower = contenido.toLowerCase();
             let cmd = null;
             let args = '';
 
-            if (lower.startsWith('!enp')) {
-                cmd = 'p';
-                args = contenido.slice(4).trim();
-            } else if (lower.startsWith('!play ')) {
-                cmd = 'p';
-                args = contenido.slice(6).trim();
-            } else if (lower.startsWith('!p ')) {
-                cmd = 'p';
-                args = contenido.slice(3).trim();
-            } else if (lower.startsWith('en!') || lower.startsWith('!en ')) {
-                const prefijoLen = lower.startsWith('en!') ? 3 : 4;
-                const sinPrefijo = contenido.slice(prefijoLen).trim();
+            const prefijos = ['en!', '!', '-'];
+            let prefijoUsado = null;
+
+            for (const p of prefijos) {
+                if (lower.startsWith(p)) {
+                    prefijoUsado = p;
+                    break;
+                }
+            }
+
+            if (prefijoUsado) {
+                const sinPrefijo = contenido.slice(prefijoUsado.length).trim();
                 const espacioIdx = sinPrefijo.indexOf(' ');
                 if (espacioIdx === -1) {
                     cmd = sinPrefijo.toLowerCase();
@@ -56,33 +87,22 @@ module.exports = {
                     cmd = sinPrefijo.slice(0, espacioIdx).toLowerCase();
                     args = sinPrefijo.slice(espacioIdx + 1).trim();
                 }
-            } else if (
-                lower.startsWith('!skip') ||
-                lower.startsWith('!stop') ||
-                lower.startsWith('!pause') ||
-                lower.startsWith('!resume') ||
-                lower.startsWith('!queue') ||
-                lower.startsWith('!np') ||
-                lower.startsWith('!vol') ||
-                lower.startsWith('!loop') ||
-                lower.startsWith('!shuffle')
-            ) {
-                const sinExcl = contenido.slice(1).trim();
-                const espacioIdx = sinExcl.indexOf(' ');
-                if (espacioIdx === -1) {
-                    cmd = sinExcl.toLowerCase();
-                    args = '';
-                } else {
-                    cmd = sinExcl.slice(0, espacioIdx).toLowerCase();
-                    args = sinExcl.slice(espacioIdx + 1).trim();
-                }
+            } else if (lower.startsWith('play ') || lower.startsWith('p ')) {
+                const partes = contenido.split(/\s+/);
+                cmd = partes[0].toLowerCase();
+                args = partes.slice(1).join(' ').trim();
             } else {
                 return;
             }
 
-            console.log(`🎵 [Comando Prefijo] Recibido: "${contenido}" | cmd: "${cmd}" | args: "${args}" por ${message.author.tag}`);
+            if (cmd === 'p') cmd = 'play';
+            if (cmd === 's') cmd = 'skip';
+            if (cmd === 'q') cmd = 'queue';
+            if (cmd === 'v' || cmd === 'vol') cmd = 'volume';
 
-            const guildId = message.guild.id;
+            const comandosMusica = ['play', 'skip', 'stop', 'pause', 'resume', 'queue', 'np', 'volume', 'shuffle', 'loop'];
+            if (!comandosMusica.includes(cmd)) return;
+
             const canalVoz = message.member?.voice?.channel;
 
             const responder = async (opciones) => {
@@ -93,8 +113,8 @@ module.exports = {
                 }
             };
 
-            // ── COMANDO: en!p / !enp / en!play ──
-            if (cmd === 'p' || cmd === 'play') {
+            // ── COMANDO DE TEXTO: PLAY ──
+            if (cmd === 'play') {
                 if (!canalVoz) {
                     return responder({
                         embeds: [basePremium('❌ No estás en un canal de voz', 'Únete a un canal de voz primero para poner música.', COLORES.rojo)],
@@ -103,24 +123,19 @@ module.exports = {
 
                 if (!args) {
                     return responder({
-                        embeds: [basePremium('❓ Falta la canción', 'Escribe el nombre de la canción o un enlace.\n\nEjemplo: `en!p bad bunny` o `en!p <enlace de spotify>`', COLORES.naranja)],
+                        embeds: [basePremium('❓ ¿Qué canción quieres escuchar?', 'Escribe el nombre o enlace después del comando.\n\nEjemplo: `!play Bad Bunny` o `/play cancion: Ojitos Lindos`', COLORES.naranja)],
                     });
                 }
 
-                message.channel.sendTyping().catch(() => {});
+                const msgCargando = await responder({
+                    embeds: [basePremium('🔍 Buscando...', `Buscando **${args}**...`, COLORES.morado)],
+                });
 
                 const resultado = await buscar(args);
 
-                if (resultado && resultado.error === 'NO_NODE') {
-                    return responder({
-                        embeds: [basePremium('⚠️ Conectando al Servidor de Música', 'El servidor de música (Lavalink) se está conectando. Por favor inténtalo en 5 segundos.', COLORES.naranja)],
-                    });
-                }
-
                 if (!resultado || !resultado.data) {
-                    return responder({
-                        embeds: [basePremium('🔍 Sin Resultados', `No se encontró ninguna canción para: **${args}**\n\n💡 Tip: Intenta con un nombre más descriptivo o un enlace de YouTube/Spotify.`, COLORES.rojo)],
-                    });
+                    const embedVacio = basePremium('🔍 Sin Resultados', `No se encontró ninguna canción para: **${args}**`, COLORES.rojo);
+                    return msgCargando ? msgCargando.edit({ embeds: [embedVacio] }) : responder({ embeds: [embedVacio] });
                 }
 
                 let tracks = [];
@@ -137,21 +152,14 @@ module.exports = {
                     tracks = Array.isArray(resultado.data) ? resultado.data : [resultado.data];
                 }
 
-                if (!tracks || tracks.length === 0) {
-                    return responder({
-                        embeds: [basePremium('🔍 Sin Resultados', `No se encontraron canciones para: **${args}**`, COLORES.rojo)],
-                    });
-                }
-
                 let cola = obtenerCola(guildId);
                 if (!cola) {
                     try {
                         cola = await conectar(guildId, canalVoz.id, message.channel.id, message.guild.shardId);
                     } catch (err) {
-                        console.error('Error al conectar con en!p:', err);
-                        return responder({
-                            embeds: [basePremium('❌ Error de Conexión', 'No se pudo conectar al canal de voz.', COLORES.rojo)],
-                        });
+                        console.error('Error conectando a voz:', err);
+                        const embedErr = basePremium('❌ Error de Conexión', 'No se pudo conectar al canal de voz.', COLORES.rojo);
+                        return msgCargando ? msgCargando.edit({ embeds: [embedErr] }) : responder({ embeds: [embedErr] });
                     }
                 }
 
@@ -169,135 +177,62 @@ module.exports = {
                     reproducir(guildId, t);
                 }
 
-                if (esPlaylist) {
-                    return responder({
-                        embeds: [basePremium('📋 Playlist Añadida', `**${nombrePlaylist}**\n\n🎵 **${cancionesAñadir.length}** canciones añadidas a la cola.\n📝 Cola total: **${cola.tracks.length}** canciones.`, COLORES.teal)],
-                    });
-                }
-
-                const track = cancionesAñadir[0];
-                const info = track.info;
-
                 if (yaSonando) {
-                    const embed = basePremium('➕ Añadida a la Cola', 'Se añadió exitosamente a la lista de reproducción.', COLORES.verde)
+                    const track = cancionesAñadir[0];
+                    const info = track.info;
+                    const embedConfirm = basePremium('➕ Añadida a la Cola', 'Se añadió a la lista de reproducción.', COLORES.verde)
                         .addFields(
                             { name: '🎵 Canción', value: `[${info.title}](${info.uri})`, inline: false },
-                            { name: '👤 Artista', value: info.author || 'Desconocido', inline: true },
                             { name: '⏱️ Duración', value: formatearDuracion(info.length), inline: true },
-                            { name: '#️⃣ Posición', value: `#${cola.tracks.length}`, inline: true }
+                            { name: '#️⃣ Posición en Cola', value: `#${cola.tracks.length}`, inline: true }
                         );
-                    if (info.artworkUrl) embed.setThumbnail(info.artworkUrl);
-                    return responder({ embeds: [embed] });
+                    if (info.artworkUrl) embedConfirm.setThumbnail(info.artworkUrl);
+                    if (msgCargando) {
+                        await msgCargando.edit({ embeds: [embedConfirm] });
+                        setTimeout(() => msgCargando.delete().catch(() => {}), 5000);
+                    }
+                    const { actualizarPanelDedicado } = require('../services/canalMusica');
+                    await actualizarPanelDedicado(client, guildId);
+                    return;
                 }
 
-                return responder(panelNowPlaying(cola, message.author.id));
+                const panel = panelNowPlaying(cola, message.author.id);
+                const respFinal = msgCargando ? await msgCargando.edit(panel) : await responder(panel);
+                if (respFinal?.id) cola.mensajeId = respFinal.id;
+                const { actualizarPanelDedicado } = require('../services/canalMusica');
+                await actualizarPanelDedicado(client, guildId);
             }
 
-            // ── COMANDO: en!skip / en!s ──
-            if (cmd === 'skip' || cmd === 's') {
+            // ── RESTO DE COMANDOS DE TEXTO ──
+            if (cmd === 'skip') {
                 const cola = obtenerCola(guildId);
-                if (!cola || !cola.current) {
-                    return responder({
-                        embeds: [basePremium('❌ Sin Música', 'No hay ninguna canción reproduciéndose.', COLORES.rojo)],
-                    });
-                }
-                const saltada = cola.current.info.title;
+                if (!cola || !cola.current) return responder({ embeds: [basePremium('❌ Sin Música', 'No hay canciones reproduciéndose.', COLORES.rojo)] });
                 saltar(guildId);
-                return responder({
-                    embeds: [basePremium('⏭️ Canción Saltada', `Se saltó **${saltada}**.`, COLORES.verde)],
-                });
+                const { actualizarPanelDedicado } = require('../services/canalMusica');
+                await actualizarPanelDedicado(client, guildId);
+                return responder({ embeds: [basePremium('⏭️ Canción Saltada', 'Se saltó a la siguiente canción.', COLORES.verde)] });
             }
 
-            // ── COMANDO: en!stop ──
             if (cmd === 'stop') {
-                const cola = obtenerCola(guildId);
-                if (!cola) {
-                    return responder({
-                        embeds: [basePremium('❌ Sin Música', 'El bot no está reproduciendo música en este servidor.', COLORES.rojo)],
-                    });
-                }
                 desconectar(guildId);
-                return responder({
-                    embeds: [basePremium('⏹️ Música Detenida', 'Se detuvo la reproducción y el bot se desconectó.', COLORES.rojo)],
-                });
+                const { actualizarPanelDedicado } = require('../services/canalMusica');
+                await actualizarPanelDedicado(client, guildId);
+                return responder({ embeds: [basePremium('⏹️ Música Detenida', 'Se detuvo la reproducción y el bot se desconectó.', COLORES.rojo)] });
             }
 
-            // ── COMANDO: en!pause ──
-            if (cmd === 'pause') {
-                const exito = pausar(guildId);
-                if (!exito) {
-                    return responder({ embeds: [basePremium('❌ Error', 'No hay música activa para pausar.', COLORES.rojo)] });
-                }
-                return responder({ embeds: [basePremium('⏸️ Música Pausada', 'Usa `en!resume` o el botón ▶️ del panel para continuar.', COLORES.naranja)] });
-            }
-
-            // ── COMANDO: en!resume / en!r ──
-            if (cmd === 'resume' || cmd === 'r') {
-                const exito = reanudar(guildId);
-                if (!exito) {
-                    return responder({ embeds: [basePremium('❌ Error', 'No hay música pausada.', COLORES.rojo)] });
-                }
-                return responder({ embeds: [basePremium('▶️ Música Reanudada', 'La reproducción continúa.', COLORES.verde)] });
-            }
-
-            // ── COMANDO: en!queue / en!q ──
-            if (cmd === 'queue' || cmd === 'q') {
+            if (cmd === 'queue') {
                 const cola = obtenerCola(guildId);
-                if (!cola || (!cola.current && cola.tracks.length === 0)) {
-                    return responder({
-                        embeds: [basePremium('📋 Cola Vacía', 'No hay canciones en la cola.\n\nUsa `en!p <canción>` para agregar.', COLORES.morado)],
-                    });
-                }
+                if (!cola || (!cola.current && cola.tracks.length === 0)) return responder({ embeds: [basePremium('📋 Cola Vacía', 'No hay canciones en la cola.', COLORES.morado)] });
                 return responder(panelCola(cola, message.author.id, 0));
             }
 
-            // ── COMANDO: en!np ──
             if (cmd === 'np') {
                 const cola = obtenerCola(guildId);
-                if (!cola || !cola.current) {
-                    return responder({
-                        embeds: [basePremium('🔇 Silencio', 'No hay ninguna canción reproduciéndose.', COLORES.morado)],
-                    });
-                }
+                if (!cola || !cola.current) return responder({ embeds: [basePremium('🔇 Silencio', 'No hay ninguna canción reproduciéndose.', COLORES.morado)] });
                 return responder(panelNowPlaying(cola, message.author.id));
             }
-
-            // ── COMANDO: en!vol ──
-            if (cmd === 'vol' || cmd === 'volume') {
-                const num = parseInt(args, 10);
-                if (isNaN(num)) {
-                    return responder({ embeds: [basePremium('❓ Volumen', 'Uso: `en!vol <0-150>`', COLORES.naranja)] });
-                }
-                const exito = await setVolumen(guildId, num);
-                if (!exito) {
-                    return responder({ embeds: [basePremium('❌ Error', 'No hay música activa.', COLORES.rojo)] });
-                }
-                return responder({
-                    embeds: [basePremium('🔊 Volumen Ajustado', `Volumen fijado en **${Math.max(0, Math.min(150, num))}%**`, COLORES.verde)],
-                });
-            }
-
-            // ── COMANDO: en!loop ──
-            if (cmd === 'loop') {
-                const modo = toggleLoop(guildId);
-                if (!modo) {
-                    return responder({ embeds: [basePremium('❌ Error', 'No hay música activa.', COLORES.rojo)] });
-                }
-                return responder({
-                    embeds: [basePremium('🔄 Modo de Repetición', `Modo actual: **${modo}**`, COLORES.verde)],
-                });
-            }
-
-            // ── COMANDO: en!shuffle ──
-            if (cmd === 'shuffle') {
-                const exito = barajar(guildId);
-                if (!exito) {
-                    return responder({ embeds: [basePremium('❌ Error', 'Se necesitan al menos 2 canciones en cola.', COLORES.rojo)] });
-                }
-                return responder({ embeds: [basePremium('🔀 Cola Mezclada', 'La cola de reproducción fue barajada.', COLORES.verde)] });
-            }
-        } catch (err) {
-            console.error('❌ Error no controlado en messageCreate:', err);
+        } catch (error) {
+            console.error('❌ Error en comando de texto:', error);
         }
     },
 };

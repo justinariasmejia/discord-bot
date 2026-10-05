@@ -9,6 +9,8 @@ const configSchema = new Schema({
     canalLogsId: { type: String, default: null },           // Logs detallados de toda actividad
     canalAnunciosId: { type: String, default: null },       // Anuncios admin/moderación
     canalJuegosId: { type: String, default: null },         // Canal exclusivo para juegos/apuestas
+    canalMusicaId: { type: String, default: null },         // Canal dedicado para pedidos de música
+    mensajeMusicaId: { type: String, default: null },       // ID del panel permanente de música
     // ── Estado del Evento ──
     fechaCierre: { type: Date, required: true },
     estado: { type: String, enum: ['activo', 'finalizado'], default: 'activo' },

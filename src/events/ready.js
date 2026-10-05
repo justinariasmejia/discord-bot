@@ -6,6 +6,7 @@ const { reembolsarDuelosPendientes } = require('../services/duelos');
 const { iniciarServicioEventosAleatorios } = require('../services/eventos-aleatorios');
 const { iniciarServicioCierre } = require('../services/cierre');
 const { setLogClient } = require('../services/logger');
+const { cargarCanalesMusica } = require('../services/canalMusica');
 
 module.exports = {
     name: 'clientReady',
@@ -24,11 +25,14 @@ module.exports = {
             const comandosData = Array.from(client.commands.values()).map((c) => c.data.toJSON());
             for (const guild of client.guilds.cache.values()) {
                 await guild.commands.set(comandosData);
-                console.log(`⚡ Comandos slash actualizados al instante en: ${guild.name}`);
+                console.log(`⚡ Comandos slash actualizados (${comandosData.length} comandos) en: ${guild.name}`);
             }
         } catch (err) {
             console.warn('⚠️ No se pudieron registrar comandos de servidor automáticamente:', err?.message || err);
         }
+
+        // Cargar configuración de canales dedicados de música
+        await cargarCanalesMusica(client);
 
         // Reembolsar apuestas y duelos pendientes tras un reinicio inesperado
         await reembolsarRondasPendientes();

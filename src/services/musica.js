@@ -1,5 +1,6 @@
 // src/services/musica.js
-// Gestor de colas de reproducción y control de música con Shoukaku/Lavalink.
+// Gestor de colas de reproducción y control de música con Shoukaku/Lavalink v4.
+// Soporte Multi-nodo automático (Visihost + Backup Serenetia con YouTube Plugin).
 const { Shoukaku, Connectors } = require('shoukaku');
 const { esUrlSpotify, resolverSpotify } = require('./spotify');
 
@@ -15,23 +16,38 @@ function inicializarShoukaku(client) {
     const auth = process.env.LAVALINK_PASSWORD || 'youshallnotpass';
     const secure = process.env.LAVALINK_SECURE === 'true';
 
-    const nodos = [{
-        name: 'ZeroMusic',
-        url: host,
-        auth: auth,
-        secure: secure,
-    }];
+    const nodos = [
+        {
+            name: 'ZeroMusic-Backup',
+            url: 'lavalinkv4.serenetia.com:443',
+            auth: 'https://seretia.link/discord',
+            secure: true,
+        },
+        {
+            name: 'ZeroMusic-Visihost',
+            url: host,
+            auth: auth,
+            secure: secure,
+        },
+    ];
 
     try {
         _shoukaku = new Shoukaku(new Connectors.DiscordJS(client), nodos, {
-            moveOnDisconnect: false,
+            moveOnDisconnect: true,
+            resumable: true,
             reconnectTries: Infinity,
             reconnectInterval: 5000,
-            restTimeout: 15000,
+            restTimeout: 10000,
+            nodeResolver: (nodes) => {
+                const list = [...nodes.values()].filter((n) => n.state === 1);
+                const backup = list.find((n) => n.name === 'ZeroMusic-Backup');
+                if (backup) return backup;
+                return list.sort((a, b) => a.penalties - b.penalties)[0];
+            },
         });
 
         _shoukaku.on('ready', (name) => {
-            console.log(`🎵 [Lavalink] Nodo "${name}" conectado y listo para reproducir música.`);
+            console.log(`🎵 [Lavalink] Nodo "${name}" CONECTADO y listo para reproducir música.`);
         });
 
         _shoukaku.on('error', (name, err) => {
@@ -74,7 +90,7 @@ function esResultadoValido(res) {
     return true;
 }
 
-// ── Búsqueda de Canciones (Spotify -> YouTube Music -> YouTube -> SoundCloud) ──
+// ── Búsqueda Universal (URLs directas, Spotify, YouTube estándar, YouTube Music, SoundCloud) ──
 async function buscar(query) {
     const node = nodoDisponible();
     if (!node) {
@@ -86,6 +102,11 @@ async function buscar(query) {
     // 1. Detección y resolución de enlaces de Spotify
     if (esUrlSpotify(busqueda)) {
         try {
+            const resDirect = await node.rest.resolve(busqueda);
+            if (esResultadoValido(resDirect)) return resDirect;
+        } catch {}
+
+        try {
             const spotData = await resolverSpotify(busqueda);
             if (spotData && spotData.query) {
                 console.log(`🟢 [Spotify] Resuelto enlace a búsqueda: "${spotData.query}"`);
@@ -96,44 +117,38 @@ async function buscar(query) {
         }
     }
 
-    // 2. Si es URL directa (SoundCloud, YouTube directo, stream HTTP)
+    // 2. Si es URL directa (YouTube, SoundCloud, stream HTTP)
     if (/^https?:\/\//i.test(busqueda)) {
         try {
             const resUrl = await node.rest.resolve(busqueda);
             if (esResultadoValido(resUrl)) return resUrl;
         } catch (err) {
-            console.error('Error buscando URL:', err?.message || err);
+            console.error('Error buscando URL directa:', err?.message || err);
         }
     }
 
-    // 3. Probar SoundCloud (scsearch:) primero (Ultra estable, sin bloqueos de cifrado de YouTube)
-    try {
-        const resSc = await node.rest.resolve(`scsearch:${busqueda}`);
-        if (esResultadoValido(resSc)) {
-            return resSc;
-        }
-    } catch (err) {
-        console.warn('scsearch fallo o no disponible:', err?.message || err);
-    }
-
-    // 4. Fallback a YouTube Music (ytmsearch:)
+    // 3. YouTube Music (ytmsearch:) - Compatible al 100% con WEB_REMIX y audio de alta fidelidad
     try {
         const resYtm = await node.rest.resolve(`ytmsearch:${busqueda}`);
-        if (esResultadoValido(resYtm)) {
-            return resYtm;
-        }
+        if (esResultadoValido(resYtm)) return resYtm;
     } catch (err) {
-        console.warn('ytmsearch fallo o no disponible:', err?.message || err);
+        console.warn('ytmsearch no retornó resultados:', err?.message || err);
     }
 
-    // 5. Fallback a YouTube estándar (ytsearch:)
+    // 4. YouTube estándar (ytsearch:)
     try {
         const resYt = await node.rest.resolve(`ytsearch:${busqueda}`);
-        if (esResultadoValido(resYt)) {
-            return resYt;
-        }
+        if (esResultadoValido(resYt)) return resYt;
     } catch (err) {
-        console.error('Error buscando YouTube:', err?.message || err);
+        console.warn('ytsearch no retornó resultados:', err?.message || err);
+    }
+
+    // 5. Fallback a SoundCloud (scsearch:)
+    try {
+        const resSc = await node.rest.resolve(`scsearch:${busqueda}`);
+        if (esResultadoValido(resSc)) return resSc;
+    } catch (err) {
+        console.warn('scsearch fallo:', err?.message || err);
     }
 
     return null;
@@ -226,25 +241,43 @@ async function conectar(guildId, canalVozId, canalTextoId, shardId = 0) {
         const c = obtenerCola(guildId);
         if (!c) return;
 
-        // Auto-rescate: Si la pista falló (ej. error de cifrado YouTube), intentar resolverla en SoundCloud al instante
+        // Auto-rescate: Si la pista falló, intentar fuente alternativa de forma segura
         if (c.current && c.current.info && !c.current._fallbackAttempted) {
             c.current._fallbackAttempted = true;
+            const trackOriginal = c.current;
+            const requester = trackOriginal.requester;
             try {
                 const node = nodoDisponible();
                 if (node) {
-                    const tituloLimpio = (c.current.info.title || '')
+                    const tituloLimpio = (trackOriginal.info.title || '')
                         .replace(/\([^)]*\)/g, '')
                         .replace(/\[[^\]]*\]/g, '')
                         .replace(/video oficial/gi, '')
                         .replace(/official video/gi, '')
                         .replace(/audio oficial/gi, '')
                         .trim();
-                    const busquedaSC = `scsearch:${tituloLimpio}`.trim();
-                    console.log(`🔄 [Auto-Rescate] Intentando reproducir alternativo desde SoundCloud: "${busquedaSC}"`);
-                    const resSc = await node.rest.resolve(busquedaSC);
-                    if (resSc && Array.isArray(resSc.data) && resSc.data.length > 0) {
-                        const nuevoTrack = resSc.data[0];
-                        nuevoTrack.requester = c.current.requester;
+                    // Intentar alternativas seguras: YouTube Music -> SoundCloud
+                    const alternativas = [
+                        `ytmsearch:${tituloLimpio}`,
+                        `scsearch:${tituloLimpio}`,
+                        `ytsearch:${tituloLimpio}`,
+                    ];
+                    let resAlt = null;
+                    let fuenteUsada = 'YouTube Music';
+                    for (const alt of alternativas) {
+                        try {
+                            const candidate = await node.rest.resolve(alt.trim());
+                            if (candidate && Array.isArray(candidate.data) && candidate.data.length > 0) {
+                                resAlt = candidate;
+                                fuenteUsada = alt.startsWith('ytmsearch') ? 'YouTube Music' : alt.startsWith('scsearch') ? 'SoundCloud' : 'YouTube';
+                                console.log(`🔄 [Auto-Rescate] Alternativa encontrada en ${fuenteUsada}: "${alt}"`);
+                                break;
+                            }
+                        } catch {}
+                    }
+                    if (resAlt && Array.isArray(resAlt.data) && resAlt.data.length > 0) {
+                        const nuevoTrack = resAlt.data[0];
+                        nuevoTrack.requester = requester;
                         nuevoTrack._fallbackAttempted = true;
                         c.current = nuevoTrack;
                         c.player.playTrack({ track: { encoded: nuevoTrack.encoded } });
@@ -253,15 +286,15 @@ async function conectar(guildId, canalVozId, canalTextoId, shardId = 0) {
                             if (ch) {
                                 const { basePremium, COLORES } = require('../utils/embeds');
                                 ch.send({
-                                    embeds: [basePremium('🔄 Fuente Alternativa', `La fuente original falló. Reproduciendo automáticamente **${nuevoTrack.info.title}** desde SoundCloud.`, COLORES.teal)],
-                                }).catch(() => {});
+                                    embeds: [basePremium('🔄 Fuente Alternativa', `La fuente original reportó un error. Reproduciendo automáticamente **${nuevoTrack.info.title}** desde ${fuenteUsada}.`, COLORES.teal)],
+                                }).then(m => setTimeout(() => m.delete().catch(() => {}), 2500)).catch(() => {});
                             }
                         }
                         return;
                     }
                 }
             } catch (fallbackErr) {
-                console.warn('Fallo en rescate SoundCloud:', fallbackErr?.message || fallbackErr);
+                console.warn('Fallo en auto-rescate:', fallbackErr?.message || fallbackErr);
             }
         }
 
@@ -271,8 +304,8 @@ async function conectar(guildId, canalVozId, canalTextoId, shardId = 0) {
             if (ch) {
                 const { basePremium, COLORES } = require('../utils/embeds');
                 ch.send({
-                    embeds: [basePremium('⚠️ Pista no reproducible', `No se pudo reproducir **${c.current?.info?.title || 'la pista'}** (la fuente retornó error o está restringida).\n\n💡 *Tip: Puedes probar con otra canción o pegar un enlace directo.*\nSaltando a la siguiente canción...`, COLORES.rojo)],
-                }).catch(() => {});
+                    embeds: [basePremium('⚠️ Pista no reproducible', `No se pudo reproducir **${c.current?.info?.title || 'la pista'}**.\n\nSaltando a la siguiente canción...`, COLORES.rojo)],
+                }).then(m => setTimeout(() => m.delete().catch(() => {}), 2500)).catch(() => {});
             }
         }
         manejarFinCancion(guildId);
@@ -286,6 +319,12 @@ async function conectar(guildId, canalVozId, canalTextoId, shardId = 0) {
 }
 
 function manejarFinCancion(guildId) {
+    if (_client) {
+        try {
+            const { actualizarPanelDedicado } = require('./canalMusica');
+            actualizarPanelDedicado(_client, guildId).catch(() => {});
+        } catch {}
+    }
     const cola = obtenerCola(guildId);
     if (!cola) return;
 
@@ -367,6 +406,13 @@ function desconectar(guildId) {
     try { cola.player.destroy(); } catch {}
     try { _shoukaku.leaveVoiceChannel(guildId); } catch {}
     eliminarCola(guildId);
+
+    if (_client) {
+        try {
+            const { actualizarPanelDedicado } = require('./canalMusica');
+            actualizarPanelDedicado(_client, guildId).catch(() => {});
+        } catch {}
+    }
 }
 
 function pausar(guildId) {
