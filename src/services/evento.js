@@ -21,6 +21,12 @@ async function obtenerConfig(guildId) {
 
 const eventoActivo = (config) => config.estado === 'activo' && config.fechaCierre > new Date();
 
+function multiplicadorActual(config) {
+    if (!config) return 1;
+    if (config.multiplicadorExpira && config.multiplicadorExpira < new Date()) return 1;
+    return config.multiplicador || 1;
+}
+
 const { PermissionFlagsBits } = require('discord.js');
 
 function esAdmin(member) {
