@@ -1,4 +1,4 @@
-﻿// src/data/config.js
+// src/data/config.js
 // Configuración centralizada de balance del juego y parámetros de eventos.
 // Permite ajustar probabilidades, tiempos y recompensas sin tocar la lógica.
 
@@ -8,16 +8,29 @@ module.exports = {
         HUESOS_INICIALES: 100,
     },
 
-    // ─── Cazar (Fase 2) ───
+    // ─── Actividad de la Comunidad (Chat y Voz) ───
+    ACTIVIDAD: {
+        CHAT: {
+            COOLDOWN_MS: 60 * 1000,      // 1 minuto de cooldown por usuario
+            HUESOS_MIN: 2,               // 2 a 5 huesos por mensaje válido
+            HUESOS_MAX: 5,
+            LONGITUD_MINIMA: 4,          // Caracteres mínimos para evitar spam
+        },
+        VOZ: {
+            INTERVALO_MS: 2.5 * 60 * 1000, // Chequeo cada 2.5 minutos
+            HUESOS_POR_INTERVALO: 6,       // ~140 huesos por hora activa en llamada
+            MINIMO_MIEMBROS: 2,            // Mínimo 2 personas en la sala
+        },
+    },
+
+    // ─── Cazar (Simplificado) ───
     CAZAR: {
         COOLDOWN_MS: 60 * 60 * 1000, // 1 hora de enfriamiento entre cacerías
-        HUESOS_COMUN_MIN: 15,        // Huesos mínimos por hallazgo común
-        HUESOS_COMUN_MAX: 40,        // Huesos máximos por hallazgo común
-        HUESOS_RARO_MIN: 60,         // Huesos mínimos por hallazgo raro
-        HUESOS_RARO_MAX: 130,        // Huesos máximos por hallazgo raro
-        EMBOSCADA_PORCENTAJE: 0.05,  // Pierde el 5% de sus huesos actuales en emboscada
-        EMBOSCADA_TOPE_MAX: 50,      // Máxima cantidad de huesos que puede perder en emboscada
-        DELAY_ANIMACION_MS: 1200,    // Retardo (~1.2s) entre pasos de animación de suspenso
+        HUESOS_COMUN_MIN: 25,        // Huesos comunes
+        HUESOS_COMUN_MAX: 55,
+        HUESOS_RARO_MIN: 80,         // Cráneo Dorado
+        HUESOS_RARO_MAX: 180,
+        DELAY_ANIMACION_MS: 1200,    // Retardo (~1.2s) entre pasos de animación
     },
 
     // ─── Ranking (Fase 2) ───

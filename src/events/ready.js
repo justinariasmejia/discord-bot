@@ -7,6 +7,7 @@ const { iniciarServicioEventosAleatorios } = require('../services/eventos-aleato
 const { iniciarServicioCierre } = require('../services/cierre');
 const { setLogClient } = require('../services/logger');
 const { cargarCanalesMusica } = require('../services/canalMusica');
+const { iniciarServicioVoz } = require('../services/actividad');
 
 module.exports = {
     name: 'clientReady',
@@ -46,5 +47,8 @@ module.exports = {
 
         // Inicia el verificador de cierre automático de eventos
         iniciarServicioCierre(client);
+
+        // Inicia el servicio de recompensas por actividad en canales de voz
+        iniciarServicioVoz(client);
     },
 };

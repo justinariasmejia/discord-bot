@@ -116,51 +116,11 @@ module.exports = {
             return interaction.editReply({ embeds: [embedVictoria], components: [] });
         }
 
-        // ── 3. Abrir Cofre Maldito con Llave ──
-        if (accion === 'cofre') {
-            const ev = await EventoAleatorio.findById(eventoId);
-            if (!ev || ev.reclamado || ev.expiraEn <= new Date()) {
-                return interaction.reply({
-                    content: '🥀 El cofre ya fue abierto por otro cazador o se ha hundido bajo tierra.',
-                    flags: MessageFlags.Ephemeral,
-                });
-            }
-
-            // Verificar si el usuario tiene una llave de cofre en inventario
-            const usuario = await obtenerUsuario(userId, guildId);
-            const tieneLlave = (usuario.inventario || []).some(
-                (inv) => inv.itemId === 'llave_cofre' && inv.cantidad >= 1
-            );
-
-            if (!tieneLlave) {
-                return interaction.reply({
-                    content: '🔒 Las cadenas espectrales están firmemente selladas. Necesitas poseer una **Llave del Cofre** 🗝️ en tu inventario (adquirible en la Tienda) para abrirlo.',
-                    flags: MessageFlags.Ephemeral,
-                });
-            }
-
+        // ── 3. Recoger Aparición de Huesos / Cofre Libre ──
+        if (accion === 'huesos' || accion === 'cofre') {
             await interaction.deferUpdate();
 
-            // Consumir la llave de forma atómica
-            const llaveConsumida = await Usuario.findOneAndUpdate(
-                {
-                    userId,
-                    guildId,
-                    inventario: { $elemMatch: { itemId: 'llave_cofre', cantidad: { $gte: 1 } } },
-                },
-                { $inc: { 'inventario.$.cantidad': -1 } },
-                { new: true }
-            );
-
-            if (!llaveConsumida) {
-                return interaction.followUp({
-                    content: '⚠️ No se pudo verificar la llave en tu inventario.',
-                    flags: MessageFlags.Ephemeral,
-                });
-            }
-
-            // Reclamar el cofre
-            const cofreReclamado = await EventoAleatorio.findOneAndUpdate(
+            const ev = await EventoAleatorio.findOneAndUpdate(
                 {
                     _id: eventoId,
                     reclamado: false,
@@ -172,47 +132,21 @@ module.exports = {
                 { new: true }
             );
 
-            if (!cofreReclamado) {
-                // Reembolsar la llave si alguien más abrió el cofre en el mismo milisegundo
-                await Usuario.findOneAndUpdate(
-                    { userId, guildId, 'inventario.itemId': 'llave_cofre' },
-                    { $inc: { 'inventario.$.cantidad': 1 } }
-                );
+            if (!ev) {
                 return interaction.followUp({
-                    content: '💨 Alguien más abrió el cofre un instante antes. Tu llave ha sido devuelta intacta.',
+                    content: '🥀 ¡Demasiado tarde! Los huesos ya fueron recogidos por otro cazador o se desvanecieron.',
                     flags: MessageFlags.Ephemeral,
                 });
             }
 
-            const premioHuesos = ev.datos.premioHuesos || 400;
-            const itemExtraId = ev.datos.itemExtraId;
-            const itemExtra = ITEMS[itemExtraId];
-
-            await modificarHuesos(userId, guildId, premioHuesos, 'evento_cofre', 'Apertura de Cofre Maldito');
-
-            // Añadir el artefacto sorpresa al inventario
-            if (itemExtra) {
-                const invActualizado = await Usuario.findOneAndUpdate(
-                    { userId, guildId, 'inventario.itemId': itemExtraId },
-                    { $inc: { 'inventario.$.cantidad': 1 } },
-                    { new: true }
-                );
-                if (!invActualizado) {
-                    await Usuario.findOneAndUpdate(
-                        { userId, guildId },
-                        { $push: { inventario: { itemId: itemExtraId, cantidad: 1 } } }
-                    );
-                }
-            }
-
+            const premioHuesos = ev.datos.premioHuesos || ev.datos.premio || 200;
+            await modificarHuesos(userId, guildId, premioHuesos, 'evento_huesos', 'Aparición de Huesos en el Cementerio');
             const usuarioFinal = await obtenerUsuario(userId, guildId);
 
             const embedApertura = base(
-                '🗝️ ¡EL COFRE MALDITO HA SIDO FORZADO!',
-                `¡<@${userId}> insertó su llave espectral y quebró las cadenas!\n\n` +
-                `✨ **Botín Desenterrado:**\n` +
-                `• 🦴 **+${formatoNum(premioHuesos)}** huesos\n` +
-                (itemExtra ? `• ${itemExtra.emoji} **1x ${itemExtra.nombre}** (añadido a su inventario)\n\n` : '\n') +
+                '🦴 ¡HUESOS RECOGIDOS!',
+                `¡<@${userId}> fue el más veloz en llegar al cementerio y recolectó el botín!\n\n` +
+                `✨ **Recompensa obtenida:** **+${formatoNum(premioHuesos)}** huesos 🦴\n` +
                 `💰 Saldo actual de <@${userId}>: **${formatoNum(usuarioFinal.huesos)}** huesos.`,
                 COLORES.verde
             );

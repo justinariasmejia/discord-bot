@@ -6,7 +6,7 @@ const { panelMenu } = require('../utils/paneles');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('cripta')
-        .setDescription('🎃 Abre la Cripta de los Huesos: cazar, apostar, tienda y más'),
+        .setDescription('🎃 Abre la Cripta de los Huesos: cazar, diario, apostar y ranking'),
 
     async ejecutar(interaction) {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });

@@ -33,85 +33,47 @@ npm start        # Inicia el bot
 
 ---
 
-## 📜 Arquitectura y Fases Implementadas
+## 📜 Arquitectura y Mecánicas del Evento
 
-### 🕯️ Fase 1: Núcleo y Hub Principal
-- **`/cripta`**: Hub interactivo privado (ephemeral) con navegación fluida mediante edición de mensajes.
-- **🎁 Recompensa Diaria**: Recompensa diaria con racha (hasta 7 días consecutivos con bono acumulativo) y cooldown de 20 horas.
-- **👤 Perfil del Cazador**: Resumen del jugador, saldo actual de huesos, estadísticas completas de apuestas/cacerías y posición en el ranking global.
-- **📢 `/say`**: Envío de comunicados embebidos al canal mediante ventana modal (requiere permisos de gestionar mensajes).
+### 🕯️ 1. Hub Principal (`/cripta`) y Guía (`/ayuda`)
+- **`/cripta`**: Hub interactivo privado (ephemeral) con navegación fluida y limpia de solo 6 botones:
+  - 🏹 **Cazar**: Cacería en el cementerio cada 1 hora.
+  - 🎁 **Diario**: Bono diario con bono de racha acumulable (hasta 7 días).
+  - 🎰 **Apostar**: Acceso directo a Cara o Cruz y Tragamonedas de Halloween.
+  - 🏆 **Ranking**: Paginado interactivo de las posiciones del servidor.
+  - 👤 **Mi Perfil**: Resumen de saldo, puesto en el top y estadísticas.
+  - ❓ **¿Cómo Jugar?**: Guía rápida accesible en 1 clic.
+- **`/ayuda`**: Comando slash con la explicación completa del evento (con opción opcional de compartir públicamente en el canal).
 
-### 🏹 Fase 2: Cacería, Ranking y Salón de la Fama
-- **🏹 Cacería Espectral**:
-  - Cooldown de 1 hora verificado atómicamente en la base de datos.
-  - Animación de suspenso en 2 pasos de edición (~1.2s cada uno) antes de revelar el resultado.
-  - Tabla de botín ponderada (`src/data/loot.js`): Huesos Comunes, Cráneo Dorado Ancestral, Drop de Ítems raros, Emboscada de Monstruo (-5% con tope seguro) o Tumba Vacía.
-- **🏆 Ranking Dinámico Paginado**:
-  - Paginación interactiva (10 cazadores por página) con botones `◀ Anterior` y `Siguiente ▶`.
-  - Medallas conmemorativas para el podio (🥇, 🥈, 🥉).
-  - Muestra siempre el puesto exacto y saldo del usuario que ejecuta la consulta.
-- **🏛️ Salón de la Fama en Vivo**:
-  - Embed persistente auto-reparable que se refresca automáticamente cada 5 minutos en el canal configurado.
-  - Muestra el Top 10 en tiempo real y el total de cazadores del servidor.
+### 💬 2. Recompensas por Actividad en la Comunidad
+- **💬 Mensajes de Texto:** Cada mensaje enviado en canales de chat válidos otorga entre **2 y 5 huesos** automáticamente (con cooldown anti-spam de 60 segundos por usuario).
+- **🎙️ Salas de Voz (VC):** El bot recompensa a los miembros que pasan tiempo charlando en canales de voz activos (mínimo 2 personas en la sala y sin estar ensordecidos), otorgando **6 huesos** cada 2.5 minutos.
 
-### 🎰 Fase 3: El Antro de las Ánimas (Casino y Apuestas)
-- **🪙 Cara o Cruz**: Apuesta rápida x2.0 con selección interactiva por modal.
-- **🎲 Dados Malditos**: Suma de 2 dados (2 al 12). Modos: Bajo (2-6, x1.9), Alto (8-12, x1.9) o Número Exacto (x5.5).
-- **🎡 Ruleta de la Calabaza**: 37 casillas numeradas. Apuestas a Rojo (x2.0), Negro (x2.0) o Verde Calabaza (x14.0).
-- **🎰 Tragamonedas de Halloween**: 3 carretes con símbolos espectrales (🎃 👻 💀 🦴 🕷️) y multiplicadores de hasta x15.0.
-- **🔁 Botón de Apuesta Rápida**: Permite repetir la apuesta anterior con un solo clic.
-- **👥 Ruleta Grupal Pública**:
-  - Ronda comunitaria en el canal público con cuenta regresiva interactiva de 30 segundos.
-  - Múltiples jugadores se unen colocando sus huesos a través de modales.
-  - El pozo acumulado se reparte proporcionalmente entre los ganadores con ventaja matemática de la casa.
-- **⚔️ Duelos PvP (`/duelo`)**:
-  - Desafío directo de huesos entre dos usuarios con ventana de aceptación de 60 segundos.
-  - Minijuego de reflejos con botón señuelo que penaliza falsos clics.
-  - Reembolso automático seguro de apuestas y duelos pendientes tras reinicios del bot.
+### 🏹 3. Cacería Espectral y Ranking
+- **🏹 Cacería Directa**: Cooldown de 1 hora. Siempre otorga botín de huesos sin mecánicas molestas (Huesos Comunes, Calabazas Encantadas o Cráneos Dorados Ancestrales).
+- **🏆 Ranking Dinámico Paginado**: Paginación con botones interactivos y medallas conmemorativas (🥇, 🥈, 🥉).
+- **🏛️ Salón de la Fama en Vivo**: Embed persistente auto-actualizable cada 5 minutos en el canal configurado.
 
-### 🛒 Fase 4: Bazar, Mochila, Hechizos y Robos
-- **🛒 Tienda de la Cripta**:
-  - Compra atómica con opciones de cantidad (x1, x3, x5).
-  - Ítems disponibles:
-    - 🧪 **Poción de Suerte**: +10% de probabilidad de victoria en tus próximas 3 apuestas.
-    - ⚡ **Doble o Nada**: Tu próxima cacería duplica sus ganancias o las reduce a cero.
-    - 🧿 **Amuleto de Protección**: Protege tus huesos contra 1 intento de robo (repele al ladrón).
-    - 🗝️ **Llave del Cofre**: Abre los Cofres Malditos espontáneos que emergen en el servidor.
-    - 🏮 **Linterna Espectral**: Reduce un 25% el tiempo de espera de tus cacerías durante 2 horas.
-- **🎒 Mochila Espectral**:
-  - Visualización de objetos en posesión y encantamientos activos (temporales o por uso).
-  - Menú de activación directa de consumibles.
-- **🕵️ Callejón de las Sombras (Robos)**:
-  - Asaltos entre cazadores con cooldown de 2 horas.
-  - Bloqueo de concurrencia dual para evitar carreras entre ladrón y víctima.
-  - Probabilidad de éxito calculada según el ratio de riqueza (25% a 65%).
-  - Éxito: roba entre 5% y 15% de los huesos de la víctima (alerta pública anónima).
-  - Fallo: el ladrón es descubierto y paga una multa a la víctima (alerta pública revelando al ladrón).
-  - Inmunidad total si la víctima posee un **Amuleto de Protección**.
-- **🤲 Limosna del Fantasma**:
-  - Subsidio de emergencia diario (40 huesos) para cazadores con menos de 30 huesos.
+### 🎰 4. Apuestas y Duelos PvP
+- **🪙 Cara o Cruz**: Apuesta rápida x2.0 con 50% de probabilidad.
+- **🎰 Tragamonedas de Halloween**: 3 carretes malditos con símbolos temáticos (🎃 👻 💀 🦴 🕷️) y multiplicadores de hasta x15.0.
+- **👥 Ruleta Grupal Pública**: Ronda comunitaria de 30 segundos en el canal público.
+- **⚔️ Duelos PvP (`/duelo <usuario>`):** Desafío directo de reflejos entre dos miembros apostando sus propios huesos.
 
-### 🌕 Fase 5: Eventos Aleatorios, Administración y Cierre
-- **🎃 Eventos Espontáneos en Canal Público**:
-  - **👻 Fantasma Fugaz**: Aparece durante 60 segundos; el primer cazador en pulsar el botón lo atrapa y recibe entre 50 y 150 huesos.
-  - **🎃 Trivia del Terror**: Banco de 45 preguntas temáticas con 4 opciones. El primer acierto gana 100 huesos.
-  - **🗝️ Cofre Maldito**: Arcón que emerge durante 2 minutos. Requiere una Llave del Cofre en el inventario; otorga 300 a 800 huesos más un artefacto sorpresa.
-  - **🌕 Eclipse Espectral**: Noche de luna carmesí donde todas las recompensas se multiplican por x2 durante 30 minutos.
-- **🛡️ Panel de Administración (`/admin`)**:
-  - `/admin dar_huesos <usuario> <cantidad>`: Otorga huesos manualmente.
-  - `/admin quitar_huesos <usuario> <cantidad>`: Descuenta huesos.
-  - `/admin evento <tipo>`: Dispara inmediatamente un evento (fantasma, trivia, cofre, eclipse_2x).
-  - `/admin canal_eventos <canal>`: Establece el canal donde ocurren las apariciones comunitarias.
-  - `/admin canal_salon_fama <canal>`: Configura el canal para el Salón de la Fama.
-  - `/admin multiplicador <factor> [minutos]`: Aplica un multiplicador global temporal.
-  - `/admin transacciones [usuario]`: Consulta las últimas 15 transacciones económicas.
-  - `/admin cerrar_evento`: Fuerza el cierre inmediato y proclama los ganadores.
-  - `/admin reset_economia`: Reinicio total con panel de confirmación de seguridad irreversible.
-- **🕯️ Cierre Automático y Salón de la Fama Final**:
-  - Detección precisa de la fecha límite (`fechaCierre`).
-  - Clausura inmediata e idempotente de todas las apuestas y cacerías.
-  - Cálculo del podio final (Top 3) con persistencia en la colección `Ganadores`.
-  - Proclamación solemne con embed conmemorativo en los canales públicos.
+### 🎃 5. Eventos Aleatorios de Halloween en el Chat
+- **👻 Fantasma Fugaz**: Aparece durante 60 segundos; el primer cazador en pulsar el botón lo captura y recibe huesos (50 a 150 🦴).
+- **🦴 Aparición de Huesos**: Pila de huesos antiguos en el cementerio; cualquiera puede pulsar el botón para recogerlos libremente (150 a 350 🦴).
+- **🎃 Trivia del Terror**: Banco de 45 preguntas temáticas de terror y Halloween con 4 opciones. El primer acierto gana 100 huesos.
+- **🌕 Eclipse Espectral**: Noche de luna carmesí donde todas las ganancias se multiplican por x2 durante 30 minutos.
+
+### 🛡️ 6. Administración, Pruebas y Cierre
+- `/admin modo_test <activar: true/false> [canal_test: #canal]`: **Modo de pruebas y aislamiento.** Bloquea el evento para usuarios normales (mostrando aviso de mantenimiento) y restringe las apariciones/pruebas al canal secreto configurado. La música y otras funciones del bot continúan funcionando al 100% para todos.
+- `/admin evento <tipo>`: Dispara inmediatamente un evento (fantasma, trivia, huesos, eclipse_2x) en el canal de eventos o en el canal de pruebas si el modo test está activo.
+- `/admin dar_huesos / quitar_huesos`: Ajustes manuales.
+- `/admin canal_eventos / canal_salon_fama`: Configuración de canales.
+- `/admin multiplicador`: Bonos globales temporales.
+- `/admin ver_config`: Consulta el estado actual de los canales y si el Modo Test está activo.
+- `/admin cerrar_evento`: Proclama al podio de ganadores final del Top 3.
 
 ---
 

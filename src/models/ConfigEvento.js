@@ -16,6 +16,9 @@ const configSchema = new Schema({
     estado: { type: String, enum: ['activo', 'finalizado'], default: 'activo' },
     multiplicador: { type: Number, default: 1 },
     multiplicadorExpira: { type: Date, default: null },
+    // ── Modo de Pruebas (Test Mode) ──
+    modoTest: { type: Boolean, default: false },
+    canalTestId: { type: String, default: null },
 });
 
 module.exports = model('ConfigEvento', configSchema);

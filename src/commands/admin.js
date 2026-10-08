@@ -16,6 +16,7 @@ const Usuario = require('../models/Usuario');
 const { modificarHuesos, obtenerUsuario } = require('../services/economia');
 const { forzarEvento, activarMultiplicadorGlobal } = require('../services/eventos-aleatorios');
 const { verificarYCerrarEvento } = require('../services/cierre');
+const { obtenerConfig } = require('../services/evento');
 const { base, basePremium, COLORES, formatoNum, SEPARADOR, SEPARADOR_FINO } = require('../utils/embeds');
 const { logAdmin } = require('../services/logger');
 
@@ -154,6 +155,23 @@ module.exports = {
         // ── Reset Economía ──
         .addSubcommand((sub) =>
             sub.setName('reset_economia').setDescription('Reinicia toda la economía del servidor')
+        )
+        // ── Modo Test ──
+        .addSubcommand((sub) =>
+            sub
+                .setName('modo_test')
+                .setDescription('Configura el modo de pruebas (solo admins y canal aislado para testear)')
+                .addBooleanOption((opt) =>
+                    opt
+                        .setName('activar')
+                        .setDescription('¿Activar o desactivar el modo de pruebas?')
+                        .setRequired(true)
+                )
+                .addChannelOption((opt) =>
+                    opt
+                        .setName('canal_test')
+                        .setDescription('Canal específico donde ocurrirán las apariciones durante las pruebas')
+                )
         ),
 
     async ejecutar(interaction, client) {
@@ -341,6 +359,9 @@ module.exports = {
                     { name: '🏆 Ranking/Fama', value: formatCanal(config?.canalSalonFamaId), inline: true },
                     { name: '📋 Logs', value: formatCanal(config?.canalLogsId), inline: true },
                     { name: '📢 Anuncios', value: formatCanal(config?.canalAnunciosId), inline: true },
+                    { name: '━━━ 🧪 Modo de Pruebas ━━━', value: '\u200B', inline: false },
+                    { name: '🧪 Modo Test', value: config?.modoTest ? '🟢 Activado' : '⚪ Desactivado', inline: true },
+                    { name: '🔬 Canal de Pruebas', value: formatCanal(config?.canalTestId), inline: true },
                     { name: '━━━ 📊 Estado del Evento ━━━', value: '\u200B', inline: false },
                     { name: '📌 Estado', value: config?.estado === 'activo' ? '🟢 Activo' : '🔴 Finalizado', inline: true },
                     { name: '⏳ Cierre', value: config?.fechaCierre ? `<t:${Math.floor(config.fechaCierre.getTime() / 1000)}:R>` : 'No definido', inline: true },
@@ -359,8 +380,9 @@ module.exports = {
             const tipo = interaction.options.getString('tipo');
 
             const conf = await ConfigEvento.findOne({ guildId });
-            if (!conf || !conf.canalEventosId) {
-                return interaction.editReply({ content: '⚠️ Primero configura el canal de eventos: `/admin canal_eventos`.' });
+            const canalDestinoId = (conf?.modoTest && conf?.canalTestId) ? conf.canalTestId : conf?.canalEventosId;
+            if (!conf || !canalDestinoId) {
+                return interaction.editReply({ content: '⚠️ Primero configura el canal de eventos o el canal de pruebas: `/admin modo_test` o `/admin canal_eventos`.' });
             }
 
             const res = await forzarEvento(guildId, client, tipo);
@@ -368,8 +390,9 @@ module.exports = {
                 return interaction.editReply({ content: '❌ No se pudo disparar el evento.' });
             }
 
-            await logAdmin(guildId, interaction.user.id, 'Evento Manual', `Evento **${tipo}** lanzado en <#${conf.canalEventosId}>`);
-            const embed = basePremium('✅ Evento Disparado', `Evento **${tipo}** lanzado en <#${conf.canalEventosId}>.`, COLORES.verde);
+            const avisoTest = conf.modoTest ? ' *(🧪 Lanzado en Canal de Pruebas)*' : '';
+            await logAdmin(guildId, interaction.user.id, 'Evento Manual', `Evento **${tipo}** lanzado en <#${canalDestinoId}>${avisoTest}`);
+            const embed = basePremium('✅ Evento Disparado', `Evento **${tipo}** lanzado en <#${canalDestinoId}>.${avisoTest}`, COLORES.verde);
             return interaction.editReply({ embeds: [embed] });
         }
 
@@ -478,6 +501,44 @@ module.exports = {
             );
 
             return interaction.reply({ embeds: [embedAlerta], components: [fila], flags: MessageFlags.Ephemeral });
+        }
+
+        // ══════ MODO TEST ══════
+        if (sub === 'modo_test') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const activar = interaction.options.getBoolean('activar');
+            const canalTest = interaction.options.getChannel('canal_test');
+
+            const conf = await obtenerConfig(guildId);
+            conf.modoTest = activar;
+            if (canalTest) {
+                conf.canalTestId = canalTest.id;
+            }
+            await conf.save();
+
+            const estadoStr = activar ? '🟢 **ACTIVADO**' : '🔴 **DESACTIVADO**';
+            const canalStr = conf.canalTestId ? `<#${conf.canalTestId}>` : '_Ninguno específico (usa el canal de eventos configurado)_';
+
+            const embed = basePremium(
+                '🧪 Configuración de Modo Test (Pruebas)',
+                `El modo de pruebas del evento ha sido actualizado:\n\n` +
+                `• **Estado del Modo Test:** ${estadoStr}\n` +
+                `• **Canal de Pruebas:** ${canalStr}\n\n` +
+                (activar
+                    ? '🔒 **Efecto de Aislamiento Activo:**\n' +
+                      '• Solo usuarios administradores pueden interactuar con `/cripta`, `/duelo` y botones del evento.\n' +
+                      '• Los miembros comunes verán un aviso de que el evento está en pruebas/mantenimiento.\n' +
+                      '• Las apariciones (fantasmas, huesos, trivias) ocurrirán **únicamente en el canal de pruebas**.\n' +
+                      '• Las recompensas pasivas de chat y voz quedan pausadas para no alterar la economía.\n' +
+                      '• *El resto de funciones del bot (música, comandos de moderación) siguen activas para todos sin interrupciones.*'
+                    : '🎉 **Efecto Público:**\n' +
+                      '• El evento vuelve a estar abierto y activo para todos los cazadores del servidor.'),
+                activar ? COLORES.naranja : COLORES.verde
+            );
+
+            await logAdmin(guildId, interaction.user.id, 'Modo Test', `${activar ? 'Activado' : 'Desactivado'} — Canal: ${conf.canalTestId || 'Ninguno'}`);
+
+            return interaction.editReply({ embeds: [embed] });
         }
     },
 };

@@ -12,6 +12,10 @@ async function responderError(interaction, texto) {
     }
 }
 
+const COMANDOS_EVENTO = ['cripta', 'duelo', 'ayuda'];
+const PREFIJOS_EVENTO = ['cripta', 'duelo', 'evento', 'apuesta', 'ruleta_grupal'];
+const { obtenerConfig, puedeInteractuarEvento } = require('../services/evento');
+
 module.exports = {
     name: 'interactionCreate',
 
@@ -24,19 +28,41 @@ module.exports = {
                 if (!interaction.inGuild()) {
                     return interaction.reply({ content: 'Este comando solo funciona dentro de un servidor.', flags: MessageFlags.Ephemeral });
                 }
+
+                // Verificación de Modo Test para comandos del evento
+                if (COMANDOS_EVENTO.includes(interaction.commandName)) {
+                    const conf = await obtenerConfig(interaction.guildId);
+                    const check = puedeInteractuarEvento(conf, interaction.member, interaction.channelId);
+                    if (!check.permitido) {
+                        return interaction.reply({ content: check.mensaje, flags: MessageFlags.Ephemeral });
+                    }
+                }
+
                 return await comando.ejecutar(interaction, client);
             }
 
             // ── Botones, menús y modales:  prefijo:accion:duenoId:extra ──
             if (interaction.isButton() || interaction.isAnySelectMenu() || interaction.isModalSubmit()) {
                 const partes = interaction.customId.split(':');
-                const handler = client.interacciones.get(partes[0]);
+                const prefijo = partes[0];
+                const handler = client.interacciones.get(prefijo);
                 if (!handler) return;
 
-                // Solo quien abrió el panel puede usar sus botones
-                const prefijo = partes[0];
+                // Verificación de Modo Test para interacciones del evento
+                if (PREFIJOS_EVENTO.includes(prefijo)) {
+                    const conf = await obtenerConfig(interaction.guildId);
+                    const check = puedeInteractuarEvento(conf, interaction.member, interaction.channelId);
+                    if (!check.permitido) {
+                        if (interaction.deferred || interaction.replied) {
+                            return interaction.editReply({ content: check.mensaje });
+                        }
+                        return interaction.reply({ content: check.mensaje, flags: MessageFlags.Ephemeral });
+                    }
+                }
+
+                // Solo quien abrió el panel puede usar sus botones (excepto música y eventos comunitarios abiertos a todos)
                 const dueno = partes[2];
-                if (prefijo !== 'musica' && dueno && /^\d+$/.test(dueno) && dueno !== interaction.user.id) {
+                if (prefijo !== 'musica' && dueno && dueno !== 'todos' && /^\d+$/.test(dueno) && dueno !== interaction.user.id) {
                     return interaction.reply({
                         content: '🔒 Este panel no es tuyo. Usa `/cripta` para abrir el tuyo.',
                         flags: MessageFlags.Ephemeral,

@@ -1,38 +1,25 @@
-﻿// src/data/loot.js
-// Tabla de botín ponderada para la cacería en la Cripta.
+// src/data/loot.js
+// Tabla de botín para la cacería en la Cripta (Simplificada y gratificante).
 const config = require('./config');
-const { ITEMS } = require('./items');
 
 const TABLA_BOTIN = [
     {
         tipo: 'hueso_comun',
-        peso: 50,
+        peso: 55,
         titulo: '🦴 Huesos Comunes',
-        descripcion: '¡Removiste la tierra fresca y desenterraste huesos antiguos!',
+        descripcion: '¡Removiste la tierra fresca del cementerio y desenterraste huesos antiguos!',
     },
     {
         tipo: 'hueso_raro',
-        peso: 15,
+        peso: 25,
         titulo: '✨ Cráneo Dorado Ancestral',
         descripcion: '¡Increíble hallazgo! Un cráneo de oro puro descansaba bajo un mausoleo.',
     },
     {
-        tipo: 'item',
-        peso: 15,
-        titulo: '🎁 Objeto Misterioso',
-        descripcion: '¡Entre lápidas rotas y telarañas descubriste un artefacto intacto!',
-    },
-    {
-        tipo: 'emboscada',
-        peso: 10,
-        titulo: '👻 ¡Emboscada de Espectros!',
-        descripcion: '¡Un alma en pena emergió furiosa de las tumbas y te arrebató huesos en la oscuridad!',
-    },
-    {
-        tipo: 'nada',
-        peso: 10,
-        titulo: '🍂 Tumba Vacía',
-        descripcion: 'La niebla se disipa y solo encuentras polvo y lápidas rotas. Nada por aquí...',
+        tipo: 'calabaza_sorpresa',
+        peso: 20,
+        titulo: '🎃 Calabaza Encantada',
+        descripcion: '¡Encontraste una calabaza brillante repleta de huesos espectrales!',
     },
 ];
 
@@ -74,32 +61,13 @@ function generarBotinCaza() {
         };
     }
 
-    if (seleccion.tipo === 'item') {
-        const clavesItems = Object.keys(ITEMS);
-        const claveElegida = clavesItems[Math.floor(Math.random() * clavesItems.length)];
-        const item = ITEMS[claveElegida];
-        return {
-            tipo: seleccion.tipo,
-            titulo: seleccion.titulo,
-            descripcion: seleccion.descripcion,
-            item,
-        };
-    }
-
-    if (seleccion.tipo === 'emboscada') {
-        return {
-            tipo: seleccion.tipo,
-            titulo: seleccion.titulo,
-            descripcion: seleccion.descripcion,
-        };
-    }
-
-    // Tipo: 'nada'
+    // Calabaza sorpresa
+    const huesos = numeroAleatorio(50, 110);
     return {
         tipo: seleccion.tipo,
         titulo: seleccion.titulo,
         descripcion: seleccion.descripcion,
-        huesosBase: 0,
+        huesosBase: huesos,
     };
 }
 

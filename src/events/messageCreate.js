@@ -17,6 +17,7 @@ const {
 const { panelNowPlaying, panelCola } = require('../utils/paneles-musica');
 const { basePremium, COLORES } = require('../utils/embeds');
 const { esCanalMusicaDedicado, procesarMensajeCanalMusica } = require('../services/canalMusica');
+const { procesarActividadTexto } = require('../services/actividad');
 
 module.exports = {
     name: 'messageCreate',
@@ -92,6 +93,8 @@ module.exports = {
                 cmd = partes[0].toLowerCase();
                 args = partes.slice(1).join(' ').trim();
             } else {
+                // Mensaje normal de chat: otorgar recompensa de actividad
+                await procesarActividadTexto(message, client);
                 return;
             }
 
@@ -101,7 +104,10 @@ module.exports = {
             if (cmd === 'v' || cmd === 'vol') cmd = 'volume';
 
             const comandosMusica = ['play', 'skip', 'stop', 'pause', 'resume', 'queue', 'np', 'volume', 'shuffle', 'loop'];
-            if (!comandosMusica.includes(cmd)) return;
+            if (!comandosMusica.includes(cmd)) {
+                await procesarActividadTexto(message, client);
+                return;
+            }
 
             const canalVoz = message.member?.voice?.channel;
 

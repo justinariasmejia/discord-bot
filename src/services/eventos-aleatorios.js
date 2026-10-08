@@ -7,16 +7,17 @@ const Usuario = require('../models/Usuario');
 const { PREGUNTAS_TRIVIA } = require('../data/trivia');
 const { ITEMS } = require('../data/items');
 const { modificarHuesos, obtenerUsuario } = require('./economia');
-const { obtenerConfig, eventoActivo } = require('./evento');
+const { obtenerConfig, eventoActivo, obtenerCanalApariciones } = require('./evento');
 const { base, COLORES, formatoNum, tiempoRelativo } = require('../utils/embeds');
 
 // ── 1. FANTASMA FUGAZ ──
 async function aparecerFantasma(guildId, client) {
     const config = await obtenerConfig(guildId);
-    if (!eventoActivo(config) || !config.canalEventosId) return null;
+    const canalId = obtenerCanalApariciones(config);
+    if (!eventoActivo(config) || !canalId) return null;
 
-    const canal = client.channels.cache.get(config.canalEventosId) ||
-        (await client.channels.fetch(config.canalEventosId).catch(() => null));
+    const canal = client.channels.cache.get(canalId) ||
+        (await client.channels.fetch(canalId).catch(() => null));
     if (!canal || !canal.isTextBased()) return null;
 
     const premio = Math.floor(Math.random() * 101) + 50; // 50 a 150 huesos
@@ -73,10 +74,11 @@ async function aparecerFantasma(guildId, client) {
 // ── 2. TRIVIA DEL TERROR ──
 async function lanzarTrivia(guildId, client) {
     const config = await obtenerConfig(guildId);
-    if (!eventoActivo(config) || !config.canalEventosId) return null;
+    const canalId = obtenerCanalApariciones(config);
+    if (!eventoActivo(config) || !canalId) return null;
 
-    const canal = client.channels.cache.get(config.canalEventosId) ||
-        (await client.channels.fetch(config.canalEventosId).catch(() => null));
+    const canal = client.channels.cache.get(canalId) ||
+        (await client.channels.fetch(canalId).catch(() => null));
     if (!canal || !canal.isTextBased()) return null;
 
     const triviaItem = PREGUNTAS_TRIVIA[Math.floor(Math.random() * PREGUNTAS_TRIVIA.length)];
@@ -140,45 +142,40 @@ async function lanzarTrivia(guildId, client) {
     return docEvento;
 }
 
-// ── 3. COFRE MALDITO ──
-async function aparecerCofre(guildId, client) {
+// ── 3. APARICIÓN DE HUESOS (Antiguo Cofre Libre) ──
+async function aparecerHuesos(guildId, client) {
     const config = await obtenerConfig(guildId);
-    if (!eventoActivo(config) || !config.canalEventosId) return null;
+    const canalId = obtenerCanalApariciones(config);
+    if (!eventoActivo(config) || !canalId) return null;
 
-    const canal = client.channels.cache.get(config.canalEventosId) ||
-        (await client.channels.fetch(config.canalEventosId).catch(() => null));
+    const canal = client.channels.cache.get(canalId) ||
+        (await client.channels.fetch(canalId).catch(() => null));
     if (!canal || !canal.isTextBased()) return null;
 
-    const premioHuesos = Math.floor(Math.random() * 501) + 300; // 300 a 800 huesos
-    const expiraEn = new Date(Date.now() + 120 * 1000); // 2 minutos
-
-    // Ítem sorpresa adicional
-    const itemsPosibles = ['pocion_suerte', 'doble_o_nada', 'linterna', 'amuleto'];
-    const itemExtraId = itemsPosibles[Math.floor(Math.random() * itemsPosibles.length)];
-    const itemExtra = ITEMS[itemExtraId];
+    const premioHuesos = Math.floor(Math.random() * 201) + 150; // 150 a 350 huesos
+    const expiraEn = new Date(Date.now() + 90 * 1000); // 90 segundos
 
     const embed = base(
-        '🗝️ ¡UN COFRE MALDITO HA SURGIDO DE LA TIERRA!',
-        'Las raíces secas se abren revelando un arcón de roble negro sellado con cadenas espectrales.\n\n' +
-        '⚠️ **Requisito:** Debes portar una **Llave del Cofre** 🗝️ en tu inventario para forzar la cerradura.\n\n' +
-        `💰 Contenido estimado: **+${formatoNum(premioHuesos)}** huesos 🦴 y un artefacto místico.\n` +
-        `⏱️ El cofre se desmoronará ${tiempoRelativo(expiraEn.getTime())}.`,
-        COLORES.morado
+        '🎃 ¡UN MONTÓN DE HUESOS HA APARECIDO!',
+        'La niebla se arremolina y revela una pila de huesos antiguos y relucientes sobre las lápidas.\n\n' +
+        `💰 Botín a recolectar: **+${formatoNum(premioHuesos)}** huesos 🦴\n` +
+        `⏱️ Se desvanecerá ${tiempoRelativo(expiraEn.getTime())}. ¡El primero en recogerlos se queda con todo!`,
+        COLORES.naranja
     );
 
     const docEvento = await EventoAleatorio.create({
         guildId,
         canalId: canal.id,
         mensajeId: 'pendiente',
-        tipo: 'cofre',
-        datos: { premioHuesos, itemExtraId },
+        tipo: 'huesos',
+        datos: { premioHuesos },
         expiraEn,
     });
 
     const boton = new ButtonBuilder()
-        .setCustomId(`evento:cofre:todos:${docEvento._id}`)
-        .setLabel('Usar Llave y Abrir Cofre')
-        .setEmoji('🗝️')
+        .setCustomId(`evento:huesos:todos:${docEvento._id}`)
+        .setLabel('¡Recoger Huesos!')
+        .setEmoji('🦴')
         .setStyle(ButtonStyle.Success);
 
     const fila = new ActionRowBuilder().addComponents(boton);
@@ -194,13 +191,13 @@ async function aparecerCofre(guildId, client) {
             ev.reclamado = true;
             await ev.save();
             const embedExpirado = base(
-                '🥀 El Cofre se ha hundido',
-                'Ningún cazador con la llave adecuada se presentó y el arcón fue tragado por la tierra profanada.',
+                '🥀 Los Huesos se han desvanecido',
+                'Nadie fue lo suficientemente rápido y los huesos fueron sepultados por la niebla nocturna.',
                 COLORES.negro
             );
             mensaje.edit({ embeds: [embedExpirado], components: [] }).catch(() => null);
         }
-    }, 120 * 1000);
+    }, 90 * 1000);
 
     return docEvento;
 }
@@ -215,9 +212,10 @@ async function activarMultiplicadorGlobal(guildId, client, minutos = 30, factor 
     config.multiplicadorExpira = expira;
     await config.save();
 
-    if (config.canalEventosId) {
-        const canal = client.channels.cache.get(config.canalEventosId) ||
-            (await client.channels.fetch(config.canalEventosId).catch(() => null));
+    const canalId = obtenerCanalApariciones(config);
+    if (canalId) {
+        const canal = client.channels.cache.get(canalId) ||
+            (await client.channels.fetch(canalId).catch(() => null));
         if (canal && canal.isTextBased()) {
             const embed = base(
                 '🌕 ¡ECLIPSE ESPECTRAL — NOCHE DE BRUJAS!',
@@ -237,25 +235,26 @@ async function activarMultiplicadorGlobal(guildId, client, minutos = 30, factor 
 async function forzarEvento(guildId, client, tipoEvento) {
     if (tipoEvento === 'fantasma') return aparecerFantasma(guildId, client);
     if (tipoEvento === 'trivia') return lanzarTrivia(guildId, client);
-    if (tipoEvento === 'cofre') return aparecerCofre(guildId, client);
+    if (tipoEvento === 'cofre' || tipoEvento === 'huesos') return aparecerHuesos(guildId, client);
     if (tipoEvento === 'eclipse_2x') return activarMultiplicadorGlobal(guildId, client, 30, 2);
     return null;
 }
 
 // ── 6. SERVICIO EN SEGUNDO PLANO (Scheduler) ──
 function iniciarServicioEventosAleatorios(client) {
-    // Revisa cada 25 minutos si lanza un evento espontáneo en los servidores
-    const INTERVALO_MS = 25 * 60 * 1000;
+    // Revisa cada 20 minutos si lanza un evento espontáneo en los servidores
+    const INTERVALO_MS = 20 * 60 * 1000;
 
     setInterval(async () => {
         try {
             for (const guild of client.guilds.cache.values()) {
                 const config = await ConfigEvento.findOne({ guildId: guild.id });
-                if (!config || !eventoActivo(config) || !config.canalEventosId) continue;
+                const canalId = config ? obtenerCanalApariciones(config) : null;
+                if (!config || !eventoActivo(config) || !canalId) continue;
 
-                // 60% de probabilidad de que ocurra un evento en este ciclo
-                if (Math.random() < 0.60) {
-                    const tipos = ['fantasma', 'trivia', 'cofre'];
+                // 65% de probabilidad de que ocurra un evento en este ciclo
+                if (Math.random() < 0.65) {
+                    const tipos = ['fantasma', 'trivia', 'huesos'];
                     const elegido = tipos[Math.floor(Math.random() * tipos.length)];
                     await forzarEvento(guild.id, client, elegido);
                 }
@@ -265,13 +264,14 @@ function iniciarServicioEventosAleatorios(client) {
         }
     }, INTERVALO_MS);
 
-    console.log('🎃 Servicio de Eventos Aleatorios iniciado (intervalo: 25m).');
+    console.log('🎃 Servicio de Eventos Aleatorios iniciado (intervalo: 20m).');
 }
 
 module.exports = {
     aparecerFantasma,
     lanzarTrivia,
-    aparecerCofre,
+    aparecerHuesos,
+    aparecerCofre: aparecerHuesos,
     activarMultiplicadorGlobal,
     forzarEvento,
     iniciarServicioEventosAleatorios,
