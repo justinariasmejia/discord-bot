@@ -111,7 +111,12 @@ async function construirPanelCripta(guildId) {
             .setCustomId('cripta:hub_ayuda:todos')
             .setLabel('¿Cómo Jugar?')
             .setEmoji('❓')
-            .setStyle(ButtonStyle.Primary)
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId('cripta:hub_notis:todos')
+            .setLabel('Alertas de Eventos')
+            .setEmoji('🔔')
+            .setStyle(ButtonStyle.Secondary)
     );
 
     return { embeds: [embed], components: [fila1, fila2] };

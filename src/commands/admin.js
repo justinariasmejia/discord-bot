@@ -117,6 +117,13 @@ module.exports = {
                 .setName('panel')
                 .setDescription('Abre el panel interactivo maestro de administración de La Cripta')
         )
+        // ── Rol de Alertas de Halloween ──
+        .addSubcommand((sub) =>
+            sub
+                .setName('rol_alertas')
+                .setDescription('Configura el rol que recibirá las alertas de eventos de Halloween')
+                .addRoleOption((opt) => opt.setName('rol').setDescription('Rol para las notificaciones').setRequired(true))
+        )
         // ── Ver Configuración Actual ──
         .addSubcommand((sub) =>
             sub
@@ -688,6 +695,35 @@ module.exports = {
             });
         }
 
+        if (sub === 'rol_alertas') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const rol = interaction.options.getRole('rol');
+            await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { rolNotificacionesEventoId: rol.id } }, { upsert: true, new: true });
+            await logAdmin(guildId, interaction.user.id, 'Rol Alertas Halloween', `Configurado: <@&${rol.id}>`);
+            return interaction.editReply({
+                embeds: [basePremium('✅ Rol de Alertas de Halloween Configurado', `Los miembros con el rol <@&${rol.id}> recibirán menciones automáticas cada vez que surja una trivia o evento especial.`, COLORES.verde)],
+            });
+        }
+
+        if (sub === 'canal_cumpleanos') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const canal = interaction.options.getChannel('canal');
+            const { configurarCanalCumpleanos } = require('../services/cumpleanos');
+            await configurarCanalCumpleanos(interaction.guildId, canal.id, client);
+            return interaction.editReply({
+                embeds: [basePremium('✅ Panel Maestro de Cumpleaños Configurado', `El panel permanente con los 10 cumpleaños más cercanos en vivo ha sido fijado en ${canal}.`, COLORES.verde)],
+            });
+        }
+
+        if (sub === 'rol_cumpleanos') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const rol = interaction.options.getRole('rol');
+            await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { rolCumpleanosId: rol.id } }, { upsert: true, new: true });
+            return interaction.editReply({
+                embeds: [basePremium('✅ Rol de Cumpleaños Configurado', `El rol <@&${rol.id}> será asignado automáticamente al cumpleañero en su día.`, COLORES.verde)],
+            });
+        }
+
         // ══════ PANEL INTERACTIVO DE ADMINISTRACIÓN ══════
         if (sub === 'panel') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -711,10 +747,13 @@ module.exports = {
                     { name: '━━━ 📡 Canales Configurados ━━━', value: '\u200B', inline: false },
                     { name: '🎃 Eventos', value: formatCanal(config?.canalEventosId), inline: true },
                     { name: '🏰 Panel Cripta', value: formatCanal(config?.canalCriptaId), inline: true },
+                    { name: '🎂 Cumpleaños', value: formatCanal(config?.canalCumpleanosId), inline: true },
                     { name: '📢 Logs Públicos', value: formatCanal(config?.canalLogsPublicosId), inline: true },
                     { name: '🛡️ Logs Admin', value: formatCanal(config?.canalLogsId), inline: true },
                     { name: '🏆 Ranking/Fama', value: formatCanal(config?.canalSalonFamaId), inline: true },
                     { name: '📢 Anuncios', value: formatCanal(config?.canalAnunciosId), inline: true },
+                    { name: '🔔 Alertas Halloween', value: config?.rolNotificacionesEventoId ? `<@&${config.rolNotificacionesEventoId}>` : '⚪ Auto (por botón)', inline: true },
+                    { name: '🎂 Rol Cumpleañero', value: config?.rolCumpleanosId ? `<@&${config.rolCumpleanosId}>` : '⚪ Auto-creable', inline: true },
                     { name: '━━━ 🧪 Modo de Pruebas ━━━', value: '\u200B', inline: false },
                     { name: '🧪 Modo Test', value: config?.modoTest ? '🟢 Activado' : '⚪ Desactivado', inline: true },
                     { name: '🔬 Canal de Pruebas', value: formatCanal(config?.canalTestId), inline: true },

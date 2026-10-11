@@ -60,9 +60,9 @@ module.exports = {
                     }
                 }
 
-                // Solo quien abrió el panel puede usar sus botones (excepto música, eventos comunitarios y super-admin)
+                // Solo quien abrió el panel puede usar sus botones (excepto música, cumpleaños, eventos comunitarios y super-admin)
                 const dueno = partes[2];
-                if (!esSuperAdmin(interaction.user.id) && prefijo !== 'musica' && dueno && dueno !== 'todos' && /^\d+$/.test(dueno) && dueno !== interaction.user.id) {
+                if (!esSuperAdmin(interaction.user.id) && prefijo !== 'musica' && prefijo !== 'cumple' && dueno && dueno !== 'todos' && /^\d+$/.test(dueno) && dueno !== interaction.user.id) {
                     return interaction.reply({
                         content: '🔒 Este panel no es tuyo. Usa `/cripta` para abrir el tuyo.',
                         flags: MessageFlags.Ephemeral,

@@ -17,6 +17,12 @@ const configSchema = new Schema({
     mensajeCriptaId: { type: String, default: null },       // ID del mensaje maestro fijo con ranking en vivo
     canalAdminPanelId: { type: String, default: null },     // Canal dedicado para el panel permanente de administración
     mensajeAdminPanelId: { type: String, default: null },   // ID del mensaje maestro fijo del panel de administración
+    // ── Panel y Sistema de Cumpleaños ──
+    canalCumpleanosId: { type: String, default: null },     // Canal dedicado para el panel fijo de cumpleaños
+    mensajeCumpleanosId: { type: String, default: null },   // ID del mensaje maestro fijo de cumpleaños
+    rolCumpleanosId: { type: String, default: null },       // Rol asignado al cumpleañero del día
+    // ── Notificaciones de Eventos de Halloween ──
+    rolNotificacionesEventoId: { type: String, default: null }, // Rol para pings de trivias y eventos
     // ── Permisos de Administración del Evento ──
     rolesAdminIds: { type: [String], default: [] },        // Roles de Discord con acceso a comandos/panel admin
     usuariosAdminIds: { type: [String], default: [] },     // Usuarios directos con acceso a comandos/panel admin

@@ -104,7 +104,13 @@ async function aparecerFantasma(guildId, client) {
         .setStyle(ButtonStyle.Success);
 
     const fila = new ActionRowBuilder().addComponents(boton);
-    const mensaje = await canal.send({ embeds: [embed], components: [fila] }).catch(() => null);
+    const avisoNoti = config.rolNotificacionesEventoId ? `🔔 <@&${config.rolNotificacionesEventoId}> ¡Un fantasma ha aparecido en el cementerio!` : undefined;
+    const mensaje = await canal.send({
+        content: avisoNoti,
+        embeds: [embed],
+        components: [fila],
+        allowedMentions: { parse: ['roles'] },
+    }).catch(() => null);
     if (!mensaje) return null;
 
     docEvento.mensajeId = mensaje.id;
@@ -177,7 +183,13 @@ async function lanzarTrivia(guildId, client) {
     );
 
     const fila = new ActionRowBuilder().addComponents(botones);
-    const mensaje = await canal.send({ embeds: [embed], components: [fila] }).catch(() => null);
+    const avisoNoti = config.rolNotificacionesEventoId ? `🔔 <@&${config.rolNotificacionesEventoId}> ¡Nueva Trivia del Terror disponible!` : undefined;
+    const mensaje = await canal.send({
+        content: avisoNoti,
+        embeds: [embed],
+        components: [fila],
+        allowedMentions: { parse: ['roles'] },
+    }).catch(() => null);
     if (!mensaje) return null;
 
     docEvento.mensajeId = mensaje.id;
@@ -243,7 +255,13 @@ async function aparecerHuesos(guildId, client) {
         .setStyle(ButtonStyle.Success);
 
     const fila = new ActionRowBuilder().addComponents(boton);
-    const mensaje = await canal.send({ embeds: [embed], components: [fila] }).catch(() => null);
+    const avisoNoti = config.rolNotificacionesEventoId ? `🔔 <@&${config.rolNotificacionesEventoId}> ¡Un botín de huesos ha aparecido!` : undefined;
+    const mensaje = await canal.send({
+        content: avisoNoti,
+        embeds: [embed],
+        components: [fila],
+        allowedMentions: { parse: ['roles'] },
+    }).catch(() => null);
     if (!mensaje) return null;
 
     docEvento.mensajeId = mensaje.id;
@@ -291,7 +309,12 @@ async function activarMultiplicadorGlobal(guildId, client, minutos = 30, factor 
                 `⏳ El eclipse durará **${minutos} minutos** (finaliza ${tiempoRelativo(expira.getTime())}).`,
                 COLORES.rojo
             );
-            canal.send({ embeds: [embed] }).catch(() => null);
+            const avisoNoti = config.rolNotificacionesEventoId ? `🔔 <@&${config.rolNotificacionesEventoId}> ¡Ha comenzado un Eclipse Espectral!` : undefined;
+            canal.send({
+                content: avisoNoti,
+                embeds: [embed],
+                allowedMentions: { parse: ['roles'] },
+            }).catch(() => null);
         }
     }
 

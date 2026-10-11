@@ -9,6 +9,7 @@ const { setLogClient } = require('../services/logger');
 const { cargarCanalesMusica } = require('../services/canalMusica');
 const { cargarCanalesCripta } = require('../services/canalCripta');
 const { cargarCanalesAdminPanel } = require('../services/panelAdmin');
+const { cargarCanalesCumpleanos, iniciarServicioCumpleanos } = require('../services/cumpleanos');
 const { iniciarServicioBackups } = require('../services/backup');
 const { iniciarServicioVoz } = require('../services/actividad');
 
@@ -42,6 +43,9 @@ module.exports = {
         // Cargar panel permanente de Administración
         await cargarCanalesAdminPanel(client);
 
+        // Cargar panel permanente de Cumpleaños
+        await cargarCanalesCumpleanos(client);
+
         // Limpieza preventiva de mensajes de eventos o trivias expiradas en el canal
         for (const guild of client.guilds.cache.values()) {
             limpiarMensajesExpiradosCanal(client, guild.id).catch(() => null);
@@ -65,5 +69,8 @@ module.exports = {
 
         // Inicia el servicio de recompensas por actividad en canales de voz
         iniciarServicioVoz(client);
+
+        // Inicia el servicio de verificación y felicitación de cumpleaños
+        iniciarServicioCumpleanos(client);
     },
 };

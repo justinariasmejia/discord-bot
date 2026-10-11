@@ -269,5 +269,70 @@ module.exports = {
                 content: '🔄 ¡Tabla de clasificación en vivo actualizada con éxito!',
             });
         }
+
+        // 🔔 Alternar Rol de Alertas de Eventos de Halloween
+        if (accion === 'hub_notis') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const ConfigEvento = require('../models/ConfigEvento');
+            let config = await ConfigEvento.findOne({ guildId: interaction.guildId });
+            if (!config) {
+                config = await ConfigEvento.create({
+                    guildId: interaction.guildId,
+                    fechaCierre: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                });
+            }
+
+            const guild = interaction.guild;
+            let rol = null;
+
+            if (config.rolNotificacionesEventoId) {
+                rol = guild.roles.cache.get(config.rolNotificacionesEventoId) ||
+                    await guild.roles.fetch(config.rolNotificacionesEventoId).catch(() => null);
+            }
+
+            if (!rol) {
+                rol = guild.roles.cache.find(r => r.name.toLowerCase().includes('alertas de halloween')) || null;
+            }
+
+            if (!rol) {
+                try {
+                    rol = await guild.roles.create({
+                        name: '🎃 Alertas de Halloween',
+                        color: '#ff7700',
+                        mentionable: true,
+                        reason: 'Rol de avisos para eventos y trivias de Halloween',
+                    });
+                } catch (err) {
+                    return interaction.editReply({
+                        content: '⚠️ No pude crear el rol de alertas automáticamente. Asegúrate de que el bot tenga el permiso **Gestionar Roles**.',
+                    });
+                }
+            }
+
+            if (config.rolNotificacionesEventoId !== rol.id) {
+                config.rolNotificacionesEventoId = rol.id;
+                await config.save();
+            }
+
+            const tieneRol = interaction.member.roles.cache.has(rol.id);
+
+            try {
+                if (tieneRol) {
+                    await interaction.member.roles.remove(rol.id);
+                    return interaction.editReply({
+                        content: `🔕 **Alertas Desactivadas**\nSe ha removido tu rol <@&${rol.id}>. Ya no recibirás menciones cuando aparezcan trivias o eventos en el servidor.`,
+                    });
+                } else {
+                    await interaction.member.roles.add(rol.id);
+                    return interaction.editReply({
+                        content: `🔔 **¡Alertas Activadas con Éxito!**\nSe te ha otorgado el rol <@&${rol.id}>. Recibirás una mención automática cada vez que aparezca un fantasma, trivia o evento especial.`,
+                    });
+                }
+            } catch (errPerm) {
+                return interaction.editReply({
+                    content: `⚠️ No se pudo modificar el rol: asegúrate de que el rol del bot esté **por encima** del rol <@&${rol.id}> en la lista de roles del servidor.`,
+                });
+            }
+        }
     },
 };
