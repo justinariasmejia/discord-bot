@@ -74,7 +74,7 @@ function calcularProbabilidad(probBase) {
 // ── 1. Cara o Cruz ──
 async function apostarCaraCruz(userId, guildId, monto, eleccion) {
     const confEvento = await obtenerConfig(guildId);
-    if (!eventoActivo(confEvento)) return { ok: false, motivo: 'evento_cerrado' };
+    if (!eventoActivo(confEvento) || confEvento.modoTest) return { ok: false, motivo: 'evento_cerrado' };
 
     const cd = verificarCooldown(userId);
     if (cd.enCooldown) return { ok: false, motivo: 'cooldown', restanteMs: cd.restanteMs };
@@ -291,7 +291,7 @@ function obtenerSimboloTragamonedas() {
 
 async function apostarTragamonedas(userId, guildId, monto) {
     const confEvento = await obtenerConfig(guildId);
-    if (!eventoActivo(confEvento)) return { ok: false, motivo: 'evento_cerrado' };
+    if (!eventoActivo(confEvento) || confEvento.modoTest) return { ok: false, motivo: 'evento_cerrado' };
 
     const cd = verificarCooldown(userId);
     if (cd.enCooldown) return { ok: false, motivo: 'cooldown', restanteMs: cd.restanteMs };

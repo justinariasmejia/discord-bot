@@ -7,7 +7,7 @@ const { iniciarServicioEventosAleatorios, limpiarMensajesExpiradosCanal } = requ
 const { iniciarServicioCierre } = require('../services/cierre');
 const { setLogClient } = require('../services/logger');
 const { cargarCanalesMusica } = require('../services/canalMusica');
-const { cargarCanalesCripta } = require('../services/canalCripta');
+const { cargarCanalesCripta, sincronizarPermisosCanalesFijos } = require('../services/canalCripta');
 const { cargarCanalesAdminPanel } = require('../services/panelAdmin');
 const { cargarCanalesCumpleanos, iniciarServicioCumpleanos } = require('../services/cumpleanos');
 const { iniciarServicioBackups } = require('../services/backup');
@@ -39,6 +39,9 @@ module.exports = {
 
         // Cargar panel permanente de La Cripta con Ranking en vivo
         await cargarCanalesCripta(client);
+
+        // Asegurar que los canales dedicados (Cripta, Logs públicos, etc.) sean de solo lectura para @everyone
+        await sincronizarPermisosCanalesFijos(client).catch(() => null);
 
         // Cargar panel permanente de Administración
         await cargarCanalesAdminPanel(client);

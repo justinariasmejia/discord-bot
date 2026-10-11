@@ -79,6 +79,16 @@ module.exports = {
         const guildId = interaction.guildId;
         const cl = client || interaction.client;
 
+        // Verificación de pausa/mantenimiento
+        const { obtenerConfig, eventoActivo } = require('../services/evento');
+        const conf = await obtenerConfig(guildId);
+        if (!eventoActivo(conf) || conf.modoTest) {
+            return safeReply(interaction, {
+                content: '🛠️ **Evento en Pausa / Mantenimiento:** La Cripta se encuentra actualmente en pausa técnica. Todos los cazadores tienen **100 huesos** y las actividades comenzarán una vez sea inaugurado oficialmente.',
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
         // ── 1. Reclamar Fantasma Fugaz ──
         if (accion === 'fantasma') {
             await safeDeferUpdate(interaction);

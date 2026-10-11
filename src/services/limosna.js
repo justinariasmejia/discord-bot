@@ -9,6 +9,7 @@ const config = require('../data/config');
 async function solicitarLimosna(userId, guildId) {
     const confEvento = await obtenerConfig(guildId);
     if (!eventoActivo(confEvento)) return { ok: false, motivo: 'evento_cerrado' };
+    if (confEvento.modoTest) return { ok: false, motivo: 'modo_test' };
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const usuario = await obtenerUsuario(userId, guildId);

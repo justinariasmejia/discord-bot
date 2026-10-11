@@ -13,6 +13,7 @@ const TOPE_RACHA = 7;                      // el bono deja de crecer al día 7 (
 async function reclamarDiario(userId, guildId) {
     const config = await obtenerConfig(guildId);
     if (!eventoActivo(config)) return { ok: false, motivo: 'evento_cerrado' };
+    if (config.modoTest) return { ok: false, motivo: 'modo_test' };
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const usuario = await obtenerUsuario(userId, guildId);

@@ -124,7 +124,7 @@ module.exports = {
             });
         }
 
-        if (accion === 'cancelar_reset_evento') {
+        if (accion === 'cancelar_reset_evento' || accion === 'reset_cancelar') {
             return interaction.update({
                 content: '✅ Operación cancelada. El evento y la economía continúan sin cambios.',
                 embeds: [],
@@ -132,7 +132,7 @@ module.exports = {
             });
         }
 
-        if (accion === 'confirmar_reset_evento') {
+        if (accion === 'confirmar_reset_evento' || accion === 'reset_confirmar') {
             await interaction.deferUpdate();
             // 1. Respaldo de seguridad previo
             const resBackup = await crearBackup(guildId, 'pre_reset_temporada');
@@ -166,8 +166,14 @@ module.exports = {
                 }
             );
 
-            // 3. Limpiar transacciones antiguas
+            // 3. Limpiar transacciones antiguas, duelos pendientes y eventos activos
             await Transaccion.deleteMany({ guildId });
+            const Duelo = require('../models/Duelo');
+            await Duelo.deleteMany({ guildId }).catch(() => null);
+            const EventoAleatorio = require('../models/EventoAleatorio');
+            await EventoAleatorio.updateMany({ guildId, reclamado: false }, { $set: { reclamado: true } }).catch(() => null);
+            const { limpiarMensajesExpiradosCanal } = require('../services/eventos-aleatorios');
+            await limpiarMensajesExpiradosCanal(client, guildId).catch(() => null);
 
             // 4. Congelar el evento automáticamente en Pausado/Mantenimiento para que nadie gane huesos hasta que el admin lo active
             await ConfigEvento.findOneAndUpdate(

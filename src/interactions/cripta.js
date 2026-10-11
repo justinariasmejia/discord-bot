@@ -40,6 +40,18 @@ module.exports = {
         const duenoId = partes[2];
         const extra = partes[3];
 
+        const { obtenerConfig } = require('../services/evento');
+        const conf = await obtenerConfig(interaction.guildId);
+        if (conf.modoTest) {
+            const accionesBloqueadas = ['cazar', 'diario', 'apostar', 'duelo', 'sel_juego', 'sel_juego_btn', 'hub_cazar', 'hub_diario', 'hub_apostar', 'hub_duelo', 'hub_sel_duelo'];
+            if (accionesBloqueadas.includes(accion)) {
+                return interaction.reply({
+                    content: '🛠️ **Evento en Pausa / Mantenimiento:** La Cripta se encuentra temporalmente en pausa técnica. Todos los cazadores tienen **100 huesos** y las actividades se habilitarán en cuanto la administración anuncie el inicio oficial.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+        }
+
         // ── 1. Menú Principal ──
         if (accion === 'menu') {
             await interaction.deferUpdate();

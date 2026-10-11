@@ -71,7 +71,7 @@ async function limpiarMensajesExpiradosCanal(client, guildId) {
 async function aparecerFantasma(guildId, client) {
     const config = await obtenerConfig(guildId);
     const canalId = obtenerCanalApariciones(config);
-    if (!eventoActivo(config) || !canalId) return null;
+    if (!eventoActivo(config) || config.modoTest || !canalId) return null;
 
     const canal = client.channels.cache.get(canalId) ||
         (await client.channels.fetch(canalId).catch(() => null));
@@ -141,7 +141,7 @@ async function aparecerFantasma(guildId, client) {
 async function lanzarTrivia(guildId, client) {
     const config = await obtenerConfig(guildId);
     const canalId = obtenerCanalApariciones(config);
-    if (!eventoActivo(config) || !canalId) return null;
+    if (!eventoActivo(config) || config.modoTest || !canalId) return null;
 
     const canal = client.channels.cache.get(canalId) ||
         (await client.channels.fetch(canalId).catch(() => null));
@@ -222,7 +222,7 @@ async function lanzarTrivia(guildId, client) {
 async function aparecerHuesos(guildId, client) {
     const config = await obtenerConfig(guildId);
     const canalId = obtenerCanalApariciones(config);
-    if (!eventoActivo(config) || !canalId) return null;
+    if (!eventoActivo(config) || config.modoTest || !canalId) return null;
 
     const canal = client.channels.cache.get(canalId) ||
         (await client.channels.fetch(canalId).catch(() => null));

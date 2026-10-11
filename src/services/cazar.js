@@ -12,6 +12,9 @@ async function cazar(userId, guildId) {
     if (!eventoActivo(config)) {
         return { ok: false, motivo: 'evento_cerrado' };
     }
+    if (config.modoTest) {
+        return { ok: false, motivo: 'modo_test' };
+    }
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const usuario = await obtenerUsuario(userId, guildId);

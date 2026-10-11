@@ -32,6 +32,16 @@ async function modificarHuesos(userId, guildId, delta, tipo, detalle = '') {
     delta = Math.trunc(delta);
     if (!Number.isFinite(delta) || delta === 0) throw new Error('Monto inválido');
 
+    // Salvaguarda absoluta: durante modoTest / mantenimiento, ningún proceso automático puede tocar los huesos.
+    // Todos los cazadores se mantienen congelados en 100 huesos hasta que el admin active el evento general.
+    if (!['admin_dar', 'admin_quitar', 'admin_set', 'bienvenida'].includes(tipo)) {
+        const ConfigEvento = require('../models/ConfigEvento');
+        const config = await ConfigEvento.findOne({ guildId }).lean();
+        if (config?.modoTest) {
+            return null;
+        }
+    }
+
     const filtro = { userId, guildId };
     if (delta < 0) filtro.huesos = { $gte: -delta };
 

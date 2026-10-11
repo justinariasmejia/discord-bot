@@ -158,6 +158,9 @@ async function configurarCanalCripta(guildId, canalId, client) {
     const canal = guild.channels.cache.get(canalId) || await guild.channels.fetch(canalId).catch(() => null);
     if (!canal) return null;
 
+    // Proteger canal para que nadie de @everyone pueda escribir ni reaccionar
+    await protegerCanalSoloLectura(canal, client);
+
     const payload = await construirPanelCripta(guildId);
     const mensajeMaestro = await canal.send(payload);
 
@@ -196,6 +199,7 @@ async function actualizarPanelCripta(client, guildId) {
         const canal = guild.channels.cache.get(config.canalId) || await guild.channels.fetch(config.canalId).catch(() => null);
         if (!canal) return;
 
+        await protegerCanalSoloLectura(canal, cl);
         const payload = await construirPanelCripta(guildId);
 
         // 1. Limpieza de mensajes de texto en el canal para mantenerlo impecable
@@ -273,6 +277,79 @@ setInterval(() => {
     }
 }, 30000);
 
+
+/**
+ * Modifica los permissionOverwrites del canal para que @everyone no pueda enviar mensajes ni reaccionar.
+ */
+async function protegerCanalSoloLectura(canal, client) {
+    if (!canal || !canal.guild || !canal.permissionOverwrites) return;
+    try {
+        const guild = canal.guild;
+        const everyone = guild.roles.everyone;
+        const cl = client || _client;
+        const botId = cl?.user?.id;
+        const botMember = guild.members.me || (botId ? await guild.members.fetch(botId).catch(() => null) : null);
+
+        // 1. Denegar permisos de envío de mensajes y reacciones a @everyone
+        await canal.permissionOverwrites.edit(everyone, {
+            [PermissionFlagsBits.SendMessages]: false,
+            [PermissionFlagsBits.SendMessagesInThreads]: false,
+            [PermissionFlagsBits.CreatePublicThreads]: false,
+            [PermissionFlagsBits.CreatePrivateThreads]: false,
+            [PermissionFlagsBits.AddReactions]: false,
+        }).catch((err) => {
+            console.warn(`⚠️ No se pudo denegar SendMessages a @everyone en #${canal.name}:`, err?.message);
+        });
+
+        // 2. Conceder permisos explícitos al bot para enviar mensajes, enlaces y adjuntos
+        if (botMember) {
+            await canal.permissionOverwrites.edit(botMember, {
+                [PermissionFlagsBits.ViewChannel]: true,
+                [PermissionFlagsBits.SendMessages]: true,
+                [PermissionFlagsBits.EmbedLinks]: true,
+                [PermissionFlagsBits.AttachFiles]: true,
+                [PermissionFlagsBits.ReadMessageHistory]: true,
+            }).catch((err) => {
+                console.warn(`⚠️ No se pudo asignar permisos al bot en #${canal.name}:`, err?.message);
+            });
+        }
+    } catch (err) {
+        console.error(`⚠️ Error al proteger canal solo lectura #${canal?.name || 'desconocido'}:`, err?.message || err);
+    }
+}
+
+/**
+ * Recorre todas las configuraciones y asegura la protección de solo lectura en los canales fijos del servidor.
+ */
+async function sincronizarPermisosCanalesFijos(client) {
+    const cl = client || _client;
+    if (!cl) return;
+    try {
+        const configs = await ConfigEvento.find({});
+        for (const conf of configs) {
+            const guild = cl.guilds.cache.get(conf.guildId) || await cl.guilds.fetch(conf.guildId).catch(() => null);
+            if (!guild) continue;
+
+            const canalesFijos = [
+                conf.canalCriptaId,
+                conf.canalLogsPublicosId,
+                conf.canalLogsId,
+                conf.canalCumpleanosId,
+                conf.canalAdminPanelId,
+            ].filter(Boolean);
+
+            for (const canalId of canalesFijos) {
+                const canal = guild.channels.cache.get(canalId) || await guild.channels.fetch(canalId).catch(() => null);
+                if (canal && canal.isTextBased()) {
+                    await protegerCanalSoloLectura(canal, cl);
+                }
+            }
+        }
+    } catch (err) {
+        console.error('⚠️ Error al sincronizar permisos de canales fijos:', err?.message || err);
+    }
+}
+
 module.exports = {
     setClientCripta,
     construirPanelCripta,
@@ -281,4 +358,6 @@ module.exports = {
     configurarCanalCripta,
     actualizarPanelCripta,
     solicitarActualizacionCripta,
+    protegerCanalSoloLectura,
+    sincronizarPermisosCanalesFijos,
 };

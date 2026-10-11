@@ -34,10 +34,22 @@ module.exports = {
                 return await procesarMensajeCanalMusica(message, client);
             }
 
-            // ── 2. CANAL DEDICADO DE LA CRIPTA (Todo interactivo con botones, canal limpio) ──
-            if (esCanalCriptaDedicado(guildId, message.channel.id)) {
-                setTimeout(() => message.delete().catch(() => {}), 1000);
-                return;
+            // ── 2. CANALES PROTEGIDOS DE SOLO LECTURA (Cripta, Logs Públicos, Logs Admin, Cumpleaños, Panel Admin) ──
+            const { obtenerConfig } = require('../services/evento');
+            const conf = await obtenerConfig(guildId).catch(() => null);
+            if (conf) {
+                const canalesSoloLectura = [
+                    conf.canalCriptaId,
+                    conf.canalLogsPublicosId,
+                    conf.canalLogsId,
+                    conf.canalCumpleanosId,
+                    conf.canalAdminPanelId,
+                ].filter(Boolean);
+
+                if (canalesSoloLectura.includes(message.channel.id)) {
+                    message.delete().catch(() => null);
+                    return;
+                }
             }
 
             let contenido = message.content?.trim() || '';

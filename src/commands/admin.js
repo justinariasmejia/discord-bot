@@ -615,6 +615,8 @@ module.exports = {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             const canal = interaction.options.getChannel('canal');
             await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalLogsId: canal.id } }, { upsert: true, new: true });
+            const { protegerCanalSoloLectura } = require('../services/canalCripta');
+            await protegerCanalSoloLectura(canal, client);
             await logAdmin(guildId, interaction.user.id, 'Canal Logs', `Configurado: <#${canal.id}>`);
             const embed = basePremium('✅ Canal de Logs Configurado', `Todas las acciones (caza, apuestas, robos, duelos, compras, admin) se registrarán en <#${canal.id}>.`, COLORES.verde);
             return interaction.editReply({ embeds: [embed] });
@@ -669,6 +671,8 @@ module.exports = {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             const canal = interaction.options.getChannel('canal');
             await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalLogsPublicosId: canal.id } }, { upsert: true, new: true });
+            const { protegerCanalSoloLectura } = require('../services/canalCripta');
+            await protegerCanalSoloLectura(canal, client);
             await logAdmin(guildId, interaction.user.id, 'Canal Logs Públicos', `Configurado: <#${canal.id}>`);
             const embed = basePremium(
                 '✅ Canal de Logs Públicos Configurado',

@@ -106,6 +106,15 @@ function panelDiario(duenoId, r) {
             const embed = base('🕯️ La Cripta ha cerrado', 'El evento ha finalizado.', COLORES.negro);
             return { embeds: [embed], components: [filaVolver(duenoId)] };
         }
+        if (r.motivo === 'modo_test' || r.motivo === 'mantenimiento') {
+            const embed = base(
+                '🛠️ Evento en Pausa / Mantenimiento',
+                'La Cripta se encuentra actualmente en pausa por la administración.\n\n' +
+                '⏳ *El evento aún no ha iniciado oficialmente. ¡Todos los cazadores comenzarán con 100 huesos al momento del lanzamiento!*',
+                COLORES.naranja
+            );
+            return { embeds: [embed], components: [filaVolver(duenoId)] };
+        }
         const embed = base('⏳ Un momento', 'Se está procesando tu solicitud.', COLORES.morado);
         return { embeds: [embed], components: [filaVolver(duenoId)] };
     }
@@ -168,6 +177,15 @@ function panelCazar(duenoId, r) {
         }
         if (r.motivo === 'evento_cerrado') {
             const embed = base('🕯️ La Cripta ha cerrado', 'El evento ha finalizado.', COLORES.negro);
+            return { embeds: [embed], components: [filaVolver(duenoId)] };
+        }
+        if (r.motivo === 'modo_test' || r.motivo === 'mantenimiento') {
+            const embed = base(
+                '🛠️ Evento en Pausa / Mantenimiento',
+                'La Cripta se encuentra actualmente en pausa por la administración.\n\n' +
+                '⏳ *El evento aún no ha iniciado oficialmente. ¡Todos los cazadores comenzarán con 100 huesos al momento del lanzamiento!*',
+                COLORES.naranja
+            );
             return { embeds: [embed], components: [filaVolver(duenoId)] };
         }
         const embed = base('⏳ Un momento', 'Se está procesando otra acción. Intenta de nuevo en un segundo.', COLORES.morado);
