@@ -201,25 +201,19 @@ module.exports = {
             return interaction.editReply(panelMenuApuestas(interaction.user.id, usuario));
         }
 
-        // ⚔️ Duelo PvP: Menú desplegable para seleccionar contrincante
+        // ⚔️ Duelo PvP: Instrucción clara de comando directo en el chat sin menú desplegable
         if (accion === 'hub_duelo') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const filaSelect = new ActionRowBuilder().addComponents(
-                new UserSelectMenuBuilder()
-                    .setCustomId(`cripta:hub_sel_duelo:${interaction.user.id}`)
-                    .setPlaceholder('🎯 Selecciona un cazador para retar a duelo...')
-                    .setMinValues(1)
-                    .setMaxValues(1)
-            );
-
             const embedDuelo = base(
-                '⚔️ Desafío de Duelo PvP',
-                'Selecciona al cazador al que deseas desafiar por huesos.\n' +
-                'Ambos deberán reaccionar con rapidez cuando la campana fúnebre suene para quedarse con la apuesta.',
+                '⚔️ Duelos PvP por Huesos',
+                'Para retar a cualquier cazador a un duelo a muerte por huesos, escribe directamente en cualquier canal de chat:\n\n' +
+                '👉 **`/duelos usuario:@cazador monto:<cantidad>`**\n\n' +
+                '• Ambos apostarán la misma cantidad de huesos.\n' +
+                '• El desafío y el juego ocurrirán en el canal donde lo escribas.\n' +
+                '• ¡El primero en disparar gana todo el pozo y queda registrado en los logs!',
                 COLORES.rojo
             );
 
-            return interaction.editReply({ embeds: [embedDuelo], components: [filaSelect] });
+            return interaction.reply({ embeds: [embedDuelo], flags: MessageFlags.Ephemeral });
         }
 
         // ⚔️ Duelo PvP: Al seleccionar contrincante se abre el modal de apuesta

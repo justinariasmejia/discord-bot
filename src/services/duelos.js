@@ -218,7 +218,14 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
     );
 
     if (mensaje) {
-        await mensaje.edit({ embeds: [embedFinal], components: [] }).catch(() => null);
+        await mensaje.edit({ content: null, embeds: [embedFinal], components: [] }).catch(() => null);
+    }
+
+    // Publicar anuncio final del vencedor en el mismo canal donde se disputó
+    if (canal && canal.send) {
+        await canal.send({
+            content: `🎉 ¡<@${ganadorId}> derrotó a <@${perdedorId}> en el duelo y se lleva **+${formatoNum(premio)}** huesos! 🦴`,
+        }).catch(() => null);
     }
 }
 
