@@ -8,6 +8,7 @@ const Transaccion = require('../models/Transaccion');
 const EventoAleatorio = require('../models/EventoAleatorio');
 const Duelo = require('../models/Duelo');
 const RondaGrupal = require('../models/RondaGrupal');
+const Cumpleanos = require('../models/Cumpleanos');
 
 const RUTA_BACKUPS = path.join(__dirname, '..', '..', 'backups');
 const MAX_BACKUPS_CONSERVADOS = 48; // Guarda hasta 48 respaldos (2 días completos de backups horarios)
@@ -31,13 +32,14 @@ async function crearBackup(guildId = null, motivo = 'manual') {
 
     const filtro = guildId ? { guildId } : {};
 
-    const [usuarios, configs, transacciones, eventos, duelos, rondas] = await Promise.all([
+    const [usuarios, configs, transacciones, eventos, duelos, rondas, cumpleanos] = await Promise.all([
         Usuario.find(filtro).lean(),
         ConfigEvento.find(filtro).lean(),
         Transaccion.find(filtro).lean(),
         EventoAleatorio.find(filtro).lean(),
         Duelo.find(filtro).lean(),
         RondaGrupal.find(filtro).lean(),
+        Cumpleanos.find(filtro).lean(),
     ]);
 
     const payload = {
@@ -56,6 +58,7 @@ async function crearBackup(guildId = null, motivo = 'manual') {
             eventos,
             duelos,
             rondas,
+            cumpleanos,
         },
     };
 

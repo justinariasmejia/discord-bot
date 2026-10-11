@@ -158,9 +158,11 @@ module.exports = {
 
             if (!esCorrecta) {
                 const nuevosIntentos = intentosPrevios + 1;
-                ev.datos.intentos[userId] = nuevosIntentos;
-                ev.markModified('datos');
-                await ev.save();
+                // Actualización atómica en base de datos para prevenir conflictos de concurrencia
+                await EventoAleatorio.updateOne(
+                    { _id: eventoId },
+                    { $set: { [`datos.intentos.${userId}`]: nuevosIntentos } }
+                );
 
                 if (nuevosIntentos === 1) {
                     return safeReply(interaction, {

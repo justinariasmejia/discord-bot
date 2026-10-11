@@ -222,18 +222,42 @@ async function actualizarPanelCripta(client, guildId) {
     }
 }
 
-// ── Solicitar Actualización Debounceada en Tiempo Real ──
+// ── Solicitar Actualización en Tiempo Real con Throttle Inteligente ──
+// Protege contra inanición (starvation) por spam de chat y evita exceder los Rate Limits de Discord.
+const estadosActualizacion = new Map(); // guildId -> { timer, ultimaActualizacion, pendiente }
+const INTERVALO_MINIMO_ACTUALIZACION_MS = 3500; // Máximo 1 actualización cada 3.5 segundos
+
 function solicitarActualizacionCripta(guildId) {
-    if (debouncesActualizacion.has(guildId)) {
-        clearTimeout(debouncesActualizacion.get(guildId));
+    const ahora = Date.now();
+    let estado = estadosActualizacion.get(guildId);
+    if (!estado) {
+        estado = { timer: null, ultimaActualizacion: 0, pendiente: false };
+        estadosActualizacion.set(guildId, estado);
     }
 
-    const t = setTimeout(() => {
-        debouncesActualizacion.delete(guildId);
-        actualizarPanelCripta(_client, guildId).catch(() => {});
-    }, 800);
+    const tiempoDesdeUltima = ahora - estado.ultimaActualizacion;
 
-    debouncesActualizacion.set(guildId, t);
+    // Si ya pasó el intervalo mínimo y no hay timer en espera, actualizar de inmediato
+    if (tiempoDesdeUltima >= INTERVALO_MINIMO_ACTUALIZACION_MS && !estado.timer) {
+        estado.ultimaActualizacion = ahora;
+        estado.pendiente = false;
+        actualizarPanelCripta(_client, guildId).catch(() => {});
+        return;
+    }
+
+    // Si está dentro de la ventana de enfriamiento, marcar pendiente y esperar el tiempo restante
+    estado.pendiente = true;
+    if (!estado.timer) {
+        const espera = Math.max(800, INTERVALO_MINIMO_ACTUALIZACION_MS - tiempoDesdeUltima);
+        estado.timer = setTimeout(() => {
+            estado.timer = null;
+            estado.ultimaActualizacion = Date.now();
+            if (estado.pendiente) {
+                estado.pendiente = false;
+                actualizarPanelCripta(_client, guildId).catch(() => {});
+            }
+        }, espera);
+    }
 }
 
 // Actualización en segundo plano cada 30s para garantizar constante sincronización en vivo

@@ -52,7 +52,7 @@ function calcularProximidad(dia, mes) {
  * Obtiene los 10 cumpleaños más cercanos del servidor ordenados por proximidad
  */
 async function obtenerProximosCumpleanos(guildId, limite = 10) {
-    const docs = await Cumpleanos.find({ guildId }).lean();
+    const docs = await Cumpleanos.find({ guildId }).select('userId dia mes anio').lean();
     if (!docs || docs.length === 0) return [];
 
     const conProximidad = docs.map((doc) => {

@@ -24,6 +24,9 @@ const configSchema = new Schema({
     rolNotificacionesCumpleId: { type: String, default: null }, // Rol para pings de avisos de cumpleaños
     // ── Notificaciones de Eventos de Halloween ──
     rolNotificacionesEventoId: { type: String, default: null }, // Rol para pings de trivias y eventos
+    // ── Canales Permitidos para Recompensas de Chat ──
+    canalesRecompensaChatIds: { type: [String], default: [] }, // Canales donde chatear da huesos
+    cooldownChatSegundos: { type: Number, default: 60 },       // Cooldown en segundos entre ganancias por chat
     // ── Permisos de Administración del Evento ──
     rolesAdminIds: { type: [String], default: [] },        // Roles de Discord con acceso a comandos/panel admin
     usuariosAdminIds: { type: [String], default: [] },     // Usuarios directos con acceso a comandos/panel admin

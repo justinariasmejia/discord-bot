@@ -65,6 +65,12 @@ async function robar(ladronId, victimaId, guildId, client) {
             // Inmunidad por Amuleto
             if (tieneEfectoActivo(victima, 'amuleto')) {
                 cooldownsRobo.set(ladronId, Date.now());
+    if (cooldownsRobo.size > 2000) {
+        const limite = Date.now() - config.ROBAR.COOLDOWN_MS;
+        for (const [id, ts] of cooldownsRobo.entries()) {
+            if (ts < limite) cooldownsRobo.delete(id);
+        }
+    }
                 const multaAmuleto = Math.min(15, ladron.huesos);
                 if (multaAmuleto > 0) {
                     await modificarHuesos(ladronId, guildId, -multaAmuleto, 'multa_robo', 'Repelido por Amuleto');

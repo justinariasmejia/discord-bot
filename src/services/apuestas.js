@@ -18,6 +18,12 @@ function verificarCooldown(userId) {
         };
     }
     cooldownsApuesta.set(userId, ahora);
+    if (cooldownsApuesta.size > 2000) {
+        const limite = ahora - config.APUESTAS.COOLDOWN_MS;
+        for (const [id, ts] of cooldownsApuesta.entries()) {
+            if (ts < limite) cooldownsApuesta.delete(id);
+        }
+    }
     return { enCooldown: false };
 }
 

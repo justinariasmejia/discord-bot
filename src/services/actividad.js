@@ -24,13 +24,32 @@ async function procesarActividadTexto(message, client) {
         const userId = message.author.id;
         const guildId = message.guild.id;
         const ahora = Date.now();
-        const cooldownMs = config.ACTIVIDAD?.CHAT?.COOLDOWN_MS || 60000;
-
-        const ultimo = cooldownsChat.get(userId) || 0;
-        if (ahora - ultimo < cooldownMs) return;
 
         const conf = await obtenerConfig(guildId);
         if (!eventoActivo(conf)) return;
+
+        // 1. Filtrar canal: Si hay canales específicos configurados, solo premiar en esos canales
+        if (conf.canalesRecompensaChatIds && conf.canalesRecompensaChatIds.length > 0) {
+            if (!conf.canalesRecompensaChatIds.includes(message.channel.id)) return;
+        } else {
+            // Si no hay lista explícita, excluir canales dedicados del bot para evitar spam en paneles
+            const canalesExcluidos = [
+                conf.canalCriptaId,
+                conf.canalCumpleanosId,
+                conf.canalAdminPanelId,
+                conf.canalMusicaId,
+                conf.canalLogsId,
+                conf.canalLogsPublicosId,
+            ].filter(Boolean);
+            if (canalesExcluidos.includes(message.channel.id)) return;
+        }
+
+        // 2. Cooldown individual por usuario entre ganancias
+        const cooldownSegundos = conf.cooldownChatSegundos || Math.round((config.ACTIVIDAD?.CHAT?.COOLDOWN_MS || 60000) / 1000);
+        const cooldownMs = cooldownSegundos * 1000;
+
+        const ultimo = cooldownsChat.get(userId) || 0;
+        if (ahora - ultimo < cooldownMs) return;
 
         // Si el usuario o su rol está en la lista negra, no recibe recompensas
         if (estaEnBlacklist(message.member, conf)) return;
