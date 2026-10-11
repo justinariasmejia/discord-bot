@@ -21,6 +21,7 @@ const configSchema = new Schema({
     canalCumpleanosId: { type: String, default: null },     // Canal dedicado para el panel fijo de cumpleaños
     mensajeCumpleanosId: { type: String, default: null },   // ID del mensaje maestro fijo de cumpleaños
     rolCumpleanosId: { type: String, default: null },       // Rol asignado al cumpleañero del día
+    rolNotificacionesCumpleId: { type: String, default: null }, // Rol para pings de avisos de cumpleaños
     // ── Notificaciones de Eventos de Halloween ──
     rolNotificacionesEventoId: { type: String, default: null }, // Rol para pings de trivias y eventos
     // ── Permisos de Administración del Evento ──

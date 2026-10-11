@@ -168,9 +168,9 @@ async function construirPanelCumpleanos(guildId) {
             .setEmoji('🗑️')
             .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
-            .setCustomId('cumple:refrescar:todos')
-            .setLabel('Refrescar Lista')
-            .setEmoji('🔄')
+            .setCustomId('cumple:hub_notis:todos')
+            .setLabel('Alertas de Cumpleaños')
+            .setEmoji('🔔')
             .setStyle(ButtonStyle.Secondary)
     );
 
@@ -355,9 +355,11 @@ async function chequearCumpleanosDiarios(client) {
                             '#f1c40f'
                         );
 
+                        const avisoRol = conf.rolNotificacionesCumpleId ? `🔔 <@&${conf.rolNotificacionesCumpleId}> ` : '';
                         await canal.send({
-                            content: `🎊 ¡Atención a todos! ¡Hoy es el cumpleaños de <@${c.userId}>! 🎂🎈`,
+                            content: `${avisoRol}🎊 ¡Atención a todos! ¡Hoy es el cumpleaños de <@${c.userId}>! 🎂🎈`,
                             embeds: [embedFestejo],
+                            allowedMentions: { parse: ['roles', 'users'] },
                         }).catch(() => null);
                     }
 
@@ -387,6 +389,14 @@ function iniciarServicioCumpleanos(client) {
         chequearCumpleanosDiarios(client).catch(() => null);
     }, 30 * 60 * 1000);
 }
+
+// Actualización automática en segundo plano cada 60s para mantener el panel siempre al día
+setInterval(() => {
+    if (!_client) return;
+    for (const guildId of canalesCumpleanosCache.keys()) {
+        actualizarPanelCumpleanos(_client, guildId).catch(() => {});
+    }
+}, 60000);
 
 module.exports = {
     MESES_NOMBRES,

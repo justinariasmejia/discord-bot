@@ -164,7 +164,75 @@ module.exports = {
             });
         }
 
-        // ── 4. Refrescar Lista ──
+        // ── 4. Alternar Rol de Alertas de Cumpleaños ──
+        if (accion === 'hub_notis') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const ConfigEvento = require('../models/ConfigEvento');
+            let config = await ConfigEvento.findOne({ guildId: interaction.guildId });
+            if (!config) {
+                config = await ConfigEvento.create({
+                    guildId: interaction.guildId,
+                    fechaCierre: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                });
+            }
+
+            const guild = interaction.guild;
+            let rol = null;
+
+            if (config.rolNotificacionesCumpleId) {
+                rol = guild.roles.cache.get(config.rolNotificacionesCumpleId) ||
+                    await guild.roles.fetch(config.rolNotificacionesCumpleId).catch(() => null);
+            }
+
+            if (!rol) {
+                rol = guild.roles.cache.find(r =>
+                    r.name.toLowerCase().includes('alertas de cumpleaños') ||
+                    r.name.toLowerCase().includes('alertas de cumpleanos')
+                ) || null;
+            }
+
+            if (!rol) {
+                try {
+                    rol = await guild.roles.create({
+                        name: '🎂 Alertas de Cumpleaños',
+                        color: '#e91e63',
+                        mentionable: true,
+                        reason: 'Rol auto-generado para avisos de cumpleaños en el servidor',
+                    });
+                } catch (err) {
+                    return interaction.editReply({
+                        content: '⚠️ No pude crear el rol de alertas automáticamente. Asegúrate de que el bot tenga el permiso **Gestionar Roles**.',
+                    });
+                }
+            }
+
+            if (config.rolNotificacionesCumpleId !== rol.id) {
+                config.rolNotificacionesCumpleId = rol.id;
+                await config.save();
+            }
+
+            const tieneRol = interaction.member.roles.cache.has(rol.id);
+
+            try {
+                if (tieneRol) {
+                    await interaction.member.roles.remove(rol.id);
+                    return interaction.editReply({
+                        content: `🔕 **Alertas de Cumpleaños Desactivadas**\nSe ha removido tu rol <@&${rol.id}>. Ya no recibirás menciones cuando un miembro cumpla años en el servidor.`,
+                    });
+                } else {
+                    await interaction.member.roles.add(rol.id);
+                    return interaction.editReply({
+                        content: `🔔 **¡Alertas de Cumpleaños Activadas!**\nSe te ha otorgado el rol <@&${rol.id}>. Recibirás una mención automática cada vez que celebremos el cumpleaños de alguien para que no te pierdas la fiesta.`,
+                    });
+                }
+            } catch (errPerm) {
+                return interaction.editReply({
+                    content: `⚠️ No se pudo modificar el rol: asegúrate de que el rol del bot esté **por encima** del rol <@&${rol.id}> en la jerarquía de roles del servidor.`,
+                });
+            }
+        }
+
+        // ── 5. Refrescar Lista (Compatibilidad) ──
         if (accion === 'refrescar') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             await actualizarPanelCumpleanos(interaction.client, interaction.guildId);

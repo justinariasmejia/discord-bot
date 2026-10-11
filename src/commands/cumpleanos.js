@@ -61,6 +61,13 @@ module.exports = {
                 .setName('rol')
                 .setDescription('Configura el rol que se asignará automáticamente a quien cumpla años')
                 .addRoleOption((opt) => opt.setName('rol').setDescription('Rol de cumpleañero').setRequired(true))
+        )
+        // ── Rol de Alertas de Cumpleaños (Admin) ──
+        .addSubcommand((sub) =>
+            sub
+                .setName('rol_alertas')
+                .setDescription('Configura el rol que recibirá las menciones de avisos de cumpleaños')
+                .addRoleOption((opt) => opt.setName('rol').setDescription('Rol para las alertas').setRequired(true))
         ),
 
     async ejecutar(interaction, client) {
@@ -208,6 +215,34 @@ module.exports = {
                 embeds: [basePremium(
                     '✅ Rol de Cumpleaños Configurado',
                     `El rol <@&${rol.id}> será asignado automáticamente a los miembros en el día de su cumpleaños y retirado al terminar el día.`,
+                    COLORES.verde
+                )],
+            });
+        }
+
+        // ── 6. Configurar Rol de Alertas de Cumpleaños (Admin) ──
+        if (sub === 'rol_alertas') {
+            const autorizado = await esAdminAsync(interaction.member, interaction.guildId);
+            if (!autorizado) {
+                return interaction.reply({
+                    content: '🔒 No tienes permisos para configurar el rol de alertas de cumpleaños.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const rol = interaction.options.getRole('rol');
+
+            await ConfigEvento.findOneAndUpdate(
+                { guildId: interaction.guildId },
+                { $set: { rolNotificacionesCumpleId: rol.id } },
+                { upsert: true }
+            );
+
+            return interaction.editReply({
+                embeds: [basePremium(
+                    '✅ Rol de Alertas de Cumpleaños Configurado',
+                    `El rol <@&${rol.id}> recibirá una mención cada vez que sea el cumpleaños de un miembro para que la comunidad pueda felicitarlo.`,
                     COLORES.verde
                 )],
             });

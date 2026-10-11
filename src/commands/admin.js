@@ -753,6 +753,7 @@ module.exports = {
                     { name: '🏆 Ranking/Fama', value: formatCanal(config?.canalSalonFamaId), inline: true },
                     { name: '📢 Anuncios', value: formatCanal(config?.canalAnunciosId), inline: true },
                     { name: '🔔 Alertas Halloween', value: config?.rolNotificacionesEventoId ? `<@&${config.rolNotificacionesEventoId}>` : '⚪ Auto (por botón)', inline: true },
+                    { name: '🎂 Alertas Cumpleaños', value: config?.rolNotificacionesCumpleId ? `<@&${config.rolNotificacionesCumpleId}>` : '⚪ Auto (por botón)', inline: true },
                     { name: '🎂 Rol Cumpleañero', value: config?.rolCumpleanosId ? `<@&${config.rolCumpleanosId}>` : '⚪ Auto-creable', inline: true },
                     { name: '━━━ 🧪 Modo de Pruebas ━━━', value: '\u200B', inline: false },
                     { name: '🧪 Modo Test', value: config?.modoTest ? '🟢 Activado' : '⚪ Desactivado', inline: true },
