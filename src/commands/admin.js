@@ -16,7 +16,7 @@ const Usuario = require('../models/Usuario');
 const { modificarHuesos, obtenerUsuario } = require('../services/economia');
 const { forzarEvento, activarMultiplicadorGlobal } = require('../services/eventos-aleatorios');
 const { verificarYCerrarEvento } = require('../services/cierre');
-const { obtenerConfig } = require('../services/evento');
+const { obtenerConfig, esSuperAdmin } = require('../services/evento');
 const { base, basePremium, COLORES, formatoNum, SEPARADOR, SEPARADOR_FINO } = require('../utils/embeds');
 const { logAdmin } = require('../services/logger');
 
@@ -24,7 +24,6 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('admin')
         .setDescription('Panel de administración de La Cripta de los Huesos')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         // ── Dar Huesos ──
         .addSubcommand((sub) =>
             sub
@@ -88,6 +87,35 @@ module.exports = {
                 .setName('canal_musica')
                 .setDescription('Canal dedicado para el reproductor interactivo en vivo')
                 .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName('canal_stickers')
+                .setDescription('Canal bóveda donde se archivarán y guardarán los stickers robados')
+                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName('canal_cripta')
+                .setDescription('Canal interactivo permanente con Ranking en vivo y botones de La Cripta')
+                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName('canal_panel')
+                .setDescription('Canal dedicado permanente para el panel maestro de administración')
+                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName('canal_logs_publicos')
+                .setDescription('Canal público donde se justifica cada ganancia y gasto de huesos en tiempo real')
+                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName('panel')
+                .setDescription('Abre el panel interactivo maestro de administración de La Cripta')
         )
         // ── Ver Configuración Actual ──
         .addSubcommand((sub) =>
@@ -172,11 +200,273 @@ module.exports = {
                         .setName('canal_test')
                         .setDescription('Canal específico donde ocurrirán las apariciones durante las pruebas')
                 )
+        )
+        // ── Gestión de Permisos de Staff / Admin ──
+        .addSubcommandGroup((grp) =>
+            grp
+                .setName('permisos')
+                .setDescription('Configura qué roles o usuarios tienen acceso al panel y comandos admin')
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('agregar_rol')
+                        .setDescription('Autoriza un rol para acceder a la administración')
+                        .addRoleOption((opt) => opt.setName('rol').setDescription('El rol de Discord').setRequired(true))
+                )
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('quitar_rol')
+                        .setDescription('Revoca los permisos de un rol')
+                        .addRoleOption((opt) => opt.setName('rol').setDescription('El rol de Discord').setRequired(true))
+                )
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('agregar_usuario')
+                        .setDescription('Autoriza a un usuario directo para acceder a la administración')
+                        .addUserOption((opt) => opt.setName('usuario').setDescription('El usuario de Discord').setRequired(true))
+                )
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('quitar_usuario')
+                        .setDescription('Revoca los permisos de un usuario directo')
+                        .addUserOption((opt) => opt.setName('usuario').setDescription('El usuario de Discord').setRequired(true))
+                )
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('ver')
+                        .setDescription('Muestra todos los roles y usuarios autorizados')
+                )
+        )
+        // ── Gestión de Blacklist del Evento ──
+        .addSubcommandGroup((grp) =>
+            grp
+                .setName('blacklist')
+                .setDescription('Gestiona la lista negra de usuarios y roles excluidos del evento')
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('agregar_rol')
+                        .setDescription('Excluye un rol para que no participe en el evento')
+                        .addRoleOption((opt) => opt.setName('rol').setDescription('El rol de Discord a bloquear').setRequired(true))
+                )
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('quitar_rol')
+                        .setDescription('Remueve un rol de la lista negra')
+                        .addRoleOption((opt) => opt.setName('rol').setDescription('El rol de Discord a desbloquear').setRequired(true))
+                )
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('agregar_usuario')
+                        .setDescription('Excluye a un usuario para que no participe en el evento')
+                        .addUserOption((opt) => opt.setName('usuario').setDescription('El usuario de Discord a bloquear').setRequired(true))
+                )
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('quitar_usuario')
+                        .setDescription('Remueve a un usuario de la lista negra')
+                        .addUserOption((opt) => opt.setName('usuario').setDescription('El usuario de Discord a desbloquear').setRequired(true))
+                )
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('ver')
+                        .setDescription('Muestra todos los roles y usuarios en la lista negra')
+                )
         ),
 
     async ejecutar(interaction, client) {
-        const sub = interaction.options.getSubcommand();
         const guildId = interaction.guildId;
+        const { esAdminAsync } = require('../services/evento');
+        const autorizado = await esAdminAsync(interaction.member, guildId);
+        if (!autorizado) {
+            return interaction.reply({
+                content: '🔒 No tienes permisos de administración ni un rol autorizado para gestionar el evento.',
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
+        const group = interaction.options.getSubcommandGroup(false);
+        const sub = interaction.options.getSubcommand();
+
+        // ══════ GESTIÓN DE PERMISOS DE STAFF ══════
+        if (group === 'permisos') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const isOwnerOrAdmin = esSuperAdmin(interaction.member.id) || interaction.member.permissions.has(PermissionFlagsBits.Administrator) || interaction.member.id === interaction.guild?.ownerId;
+            if (!isOwnerOrAdmin) {
+                return interaction.editReply({
+                    content: '🔒 Solo los **Administradores nativos**, el Dueño del servidor o el Super-Administrador pueden modificar los permisos de staff.',
+                });
+            }
+
+            const { solicitarActualizacionAdminPanel } = require('../services/panelAdmin');
+
+            if (sub === 'agregar_rol') {
+                const rol = interaction.options.getRole('rol');
+                await ConfigEvento.findOneAndUpdate(
+                    { guildId },
+                    { $addToSet: { rolesAdminIds: rol.id } },
+                    { upsert: true, new: true }
+                );
+                await logAdmin(guildId, interaction.user.id, 'Permiso Rol Agregado', `Rol <@&${rol.id}> autorizado`);
+                solicitarActualizacionAdminPanel(guildId);
+                return interaction.editReply({
+                    embeds: [basePremium('✅ Rol Autorizado', `El rol <@&${rol.id}> ahora tiene acceso al panel y comandos de administración del evento.`, COLORES.verde)],
+                });
+            }
+
+            if (sub === 'quitar_rol') {
+                const rol = interaction.options.getRole('rol');
+                await ConfigEvento.findOneAndUpdate(
+                    { guildId },
+                    { $pull: { rolesAdminIds: rol.id } },
+                    { new: true }
+                );
+                await logAdmin(guildId, interaction.user.id, 'Permiso Rol Removido', `Rol <@&${rol.id}> revocado`);
+                solicitarActualizacionAdminPanel(guildId);
+                return interaction.editReply({
+                    embeds: [basePremium('✅ Rol Revocado', `El rol <@&${rol.id}> ya no tiene acceso a la administración del evento.`, COLORES.rojo)],
+                });
+            }
+
+            if (sub === 'agregar_usuario') {
+                const user = interaction.options.getUser('usuario');
+                await ConfigEvento.findOneAndUpdate(
+                    { guildId },
+                    { $addToSet: { usuariosAdminIds: user.id } },
+                    { upsert: true, new: true }
+                );
+                await logAdmin(guildId, interaction.user.id, 'Permiso Usuario Agregado', `Usuario <@${user.id}> autorizado`);
+                solicitarActualizacionAdminPanel(guildId);
+                return interaction.editReply({
+                    embeds: [basePremium('✅ Usuario Autorizado', `El usuario <@${user.id}> ahora tiene acceso directo a la administración del evento.`, COLORES.verde)],
+                });
+            }
+
+            if (sub === 'quitar_usuario') {
+                const user = interaction.options.getUser('usuario');
+                await ConfigEvento.findOneAndUpdate(
+                    { guildId },
+                    { $pull: { usuariosAdminIds: user.id } },
+                    { new: true }
+                );
+                await logAdmin(guildId, interaction.user.id, 'Permiso Usuario Removido', `Usuario <@${user.id}> revocado`);
+                solicitarActualizacionAdminPanel(guildId);
+                return interaction.editReply({
+                    embeds: [basePremium('✅ Usuario Revocado', `El usuario <@${user.id}> ya no tiene acceso directo a la administración del evento.`, COLORES.rojo)],
+                });
+            }
+
+            if (sub === 'ver') {
+                const config = await ConfigEvento.findOne({ guildId }).lean() || {};
+                const rolesStr = (config.rolesAdminIds && config.rolesAdminIds.length > 0)
+                    ? config.rolesAdminIds.map((id) => `<@&${id}>`).join('\n• ')
+                    : '_Ningún rol configurado (Solo Administradores nativos)_';
+                const usersStr = (config.usuariosAdminIds && config.usuariosAdminIds.length > 0)
+                    ? config.usuariosAdminIds.map((id) => `<@${id}>`).join('\n• ')
+                    : '_Ningún usuario directo configurado_';
+
+                const embed = basePremium(
+                    '🛡️ Permisos de Administración Configurados',
+                    `### 🎭 Roles Autorizados:\n• ${rolesStr}\n\n` +
+                    `### 👤 Usuarios Autorizados Directamente:\n• ${usersStr}\n\n` +
+                    `*Nota: Los Administradores nativos de Discord y el Dueño del servidor siempre tienen acceso total.*`,
+                    COLORES.morado
+                );
+                return interaction.editReply({ embeds: [embed] });
+            }
+        }
+
+        // ══════ GESTIÓN DE BLACKLIST DEL EVENTO ══════
+        if (group === 'blacklist') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const isOwnerOrAdmin = esSuperAdmin(interaction.member.id) || interaction.member.permissions.has(PermissionFlagsBits.Administrator) || interaction.member.id === interaction.guild?.ownerId;
+            if (!isOwnerOrAdmin) {
+                return interaction.editReply({
+                    content: '🔒 Solo los **Administradores nativos**, el Dueño del servidor o el Super-Administrador pueden gestionar la lista negra.',
+                });
+            }
+
+            const { solicitarActualizacionAdminPanel } = require('../services/panelAdmin');
+
+            if (sub === 'agregar_rol') {
+                const rol = interaction.options.getRole('rol');
+                await ConfigEvento.findOneAndUpdate(
+                    { guildId },
+                    { $addToSet: { blacklistRolesIds: rol.id } },
+                    { upsert: true, new: true }
+                );
+                await logAdmin(guildId, interaction.user.id, 'Blacklist Rol Agregado', `Rol <@&${rol.id}> excluido del evento`);
+                solicitarActualizacionAdminPanel(guildId);
+                return interaction.editReply({
+                    embeds: [basePremium('🚫 Rol Bloqueado del Evento', `Los miembros con el rol <@&${rol.id}> han sido excluidos de participar en el evento.`, COLORES.rojo)],
+                });
+            }
+
+            if (sub === 'quitar_rol') {
+                const rol = interaction.options.getRole('rol');
+                await ConfigEvento.findOneAndUpdate(
+                    { guildId },
+                    { $pull: { blacklistRolesIds: rol.id } },
+                    { new: true }
+                );
+                await logAdmin(guildId, interaction.user.id, 'Blacklist Rol Removido', `Rol <@&${rol.id}> desbloqueado del evento`);
+                solicitarActualizacionAdminPanel(guildId);
+                return interaction.editReply({
+                    embeds: [basePremium('✅ Rol Desbloqueado', `El rol <@&${rol.id}> ha sido removido de la lista negra y sus miembros pueden participar nuevamente.`, COLORES.verde)],
+                });
+            }
+
+            if (sub === 'agregar_usuario') {
+                const user = interaction.options.getUser('usuario');
+                if (esSuperAdmin(user.id)) {
+                    return interaction.editReply({
+                        content: `❌ El usuario <@${user.id}> es el Super-Administrador y no puede ser añadido a la lista negra.`,
+                    });
+                }
+                await ConfigEvento.findOneAndUpdate(
+                    { guildId },
+                    { $addToSet: { blacklistUsuariosIds: user.id } },
+                    { upsert: true, new: true }
+                );
+                await logAdmin(guildId, interaction.user.id, 'Blacklist Usuario Agregado', `Usuario <@${user.id}> excluido del evento`);
+                solicitarActualizacionAdminPanel(guildId);
+                return interaction.editReply({
+                    embeds: [basePremium('🚫 Usuario Bloqueado del Evento', `El usuario <@${user.id}> ha sido excluido de participar en el evento.`, COLORES.rojo)],
+                });
+            }
+
+            if (sub === 'quitar_usuario') {
+                const user = interaction.options.getUser('usuario');
+                await ConfigEvento.findOneAndUpdate(
+                    { guildId },
+                    { $pull: { blacklistUsuariosIds: user.id } },
+                    { new: true }
+                );
+                await logAdmin(guildId, interaction.user.id, 'Blacklist Usuario Removido', `Usuario <@${user.id}> desbloqueado del evento`);
+                solicitarActualizacionAdminPanel(guildId);
+                return interaction.editReply({
+                    embeds: [basePremium('✅ Usuario Desbloqueado', `El usuario <@${user.id}> ha sido removido de la lista negra y puede participar nuevamente.`, COLORES.verde)],
+                });
+            }
+
+            if (sub === 'ver') {
+                const config = await ConfigEvento.findOne({ guildId }).lean() || {};
+                const rolesStr = (config.blacklistRolesIds && config.blacklistRolesIds.length > 0)
+                    ? config.blacklistRolesIds.map((id) => `<@&${id}>`).join('\n• ')
+                    : '_Ningún rol en la lista negra_';
+                const usersStr = (config.blacklistUsuariosIds && config.blacklistUsuariosIds.length > 0)
+                    ? config.blacklistUsuariosIds.map((id) => `<@${id}>`).join('\n• ')
+                    : '_Ningún usuario en la lista negra_';
+
+                const embed = basePremium(
+                    '🚫 Lista Negra del Evento • La Cripta',
+                    'Usuarios y roles excluidos de participar en el evento:\n\n' +
+                    `### 🎭 Roles Bloqueados:\n• ${rolesStr}\n\n` +
+                    `### 👤 Usuarios Bloqueados:\n• ${usersStr}`,
+                    COLORES.rojo
+                );
+
+                return interaction.editReply({ embeds: [embed] });
+            }
+        }
 
         // ══════ DAR HUESOS ══════
         if (sub === 'dar_huesos') {
@@ -333,6 +623,15 @@ module.exports = {
             });
         }
 
+        if (sub === 'canal_stickers') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const canal = interaction.options.getChannel('canal');
+            await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalStickersId: canal.id } }, { upsert: true, new: true });
+            await logAdmin(guildId, interaction.user.id, 'Canal Bóveda Stickers', `Configurado: <#${canal.id}>`);
+            const embed = basePremium('✅ Bóveda de Stickers Configurada', `Los stickers y emojis robados con \`/steal\` o \`!st\` se guardarán y archivarán en <#${canal.id}>.`, COLORES.verde);
+            return interaction.editReply({ embeds: [embed] });
+        }
+
         if (sub === 'canal_anuncios') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             const canal = interaction.options.getChannel('canal');
@@ -340,6 +639,61 @@ module.exports = {
             await logAdmin(guildId, interaction.user.id, 'Canal Anuncios', `Configurado: <#${canal.id}>`);
             const embed = basePremium('✅ Canal de Anuncios Configurado', `Los anuncios administrativos se publicarán en <#${canal.id}>.`, COLORES.verde);
             return interaction.editReply({ embeds: [embed] });
+        }
+
+        if (sub === 'canal_cripta') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const canal = interaction.options.getChannel('canal');
+            const { configurarCanalCripta } = require('../services/canalCripta');
+            await configurarCanalCripta(interaction.guildId, canal.id, client);
+            return interaction.editReply({
+                embeds: [basePremium(
+                    '✅ Canal Interactivo de La Cripta Configurado',
+                    `El centro de mando interactivo con ranking en vivo ha sido fijado en ${canal}.\n` +
+                    '• **Ranking en vivo:** El Top 10 se muestra arriba y se actualiza en tiempo real.\n' +
+                    '• **Botones:** Los usuarios juegan interactuando directamente con los botones sin escribir comandos.\n' +
+                    '• **Canal Limpio:** Todo mensaje de texto se elimina para mantener el panel siempre limpio.',
+                    COLORES.verde
+                )],
+            });
+        }
+
+        if (sub === 'canal_logs_publicos') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const canal = interaction.options.getChannel('canal');
+            await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalLogsPublicosId: canal.id } }, { upsert: true, new: true });
+            await logAdmin(guildId, interaction.user.id, 'Canal Logs Públicos', `Configurado: <#${canal.id}>`);
+            const embed = basePremium(
+                '✅ Canal de Logs Públicos Configurado',
+                `El canal <#${canal.id}> registrará públicamente todas las cacerías, apuestas, duelos, diarios y eventos en tiempo real para máxima transparencia.\n` +
+                'Los cazadores sabrán exactamente de dónde salieron los huesos de cada uno.',
+                COLORES.verde
+            );
+            return interaction.editReply({ embeds: [embed] });
+        }
+
+        if (sub === 'canal_panel') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const canal = interaction.options.getChannel('canal');
+            const { configurarCanalAdminPanel } = require('../services/panelAdmin');
+            await configurarCanalAdminPanel(interaction.guildId, canal.id, client);
+            return interaction.editReply({
+                embeds: [basePremium(
+                    '✅ Panel Permanente de Administración Configurado',
+                    `El centro de mando interactivo de administración y moderación ha sido fijado en ${canal}.\n\n` +
+                    '• **Permanente:** El panel permanecerá fijado y se sincronizará automáticamente ante cualquier cambio.\n' +
+                    '• **Acciones Rápidas:** Controla mantenimiento, entrega/remueve huesos, lanza drops/sorteos, fuerza eventos, crea backups y resetea la temporada.',
+                    COLORES.morado
+                )],
+            });
+        }
+
+        // ══════ PANEL INTERACTIVO DE ADMINISTRACIÓN ══════
+        if (sub === 'panel') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const { construirPanelAdmin } = require('../services/panelAdmin');
+            const panel = await construirPanelAdmin(guildId);
+            return interaction.editReply(panel);
         }
 
         // ══════ VER CONFIGURACIÓN ══════
@@ -356,8 +710,10 @@ module.exports = {
                 .addFields(
                     { name: '━━━ 📡 Canales Configurados ━━━', value: '\u200B', inline: false },
                     { name: '🎃 Eventos', value: formatCanal(config?.canalEventosId), inline: true },
+                    { name: '🏰 Panel Cripta', value: formatCanal(config?.canalCriptaId), inline: true },
+                    { name: '📢 Logs Públicos', value: formatCanal(config?.canalLogsPublicosId), inline: true },
+                    { name: '🛡️ Logs Admin', value: formatCanal(config?.canalLogsId), inline: true },
                     { name: '🏆 Ranking/Fama', value: formatCanal(config?.canalSalonFamaId), inline: true },
-                    { name: '📋 Logs', value: formatCanal(config?.canalLogsId), inline: true },
                     { name: '📢 Anuncios', value: formatCanal(config?.canalAnunciosId), inline: true },
                     { name: '━━━ 🧪 Modo de Pruebas ━━━', value: '\u200B', inline: false },
                     { name: '🧪 Modo Test', value: config?.modoTest ? '🟢 Activado' : '⚪ Desactivado', inline: true },

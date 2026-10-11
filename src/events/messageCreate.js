@@ -17,6 +17,7 @@ const {
 const { panelNowPlaying, panelCola } = require('../utils/paneles-musica');
 const { basePremium, COLORES } = require('../utils/embeds');
 const { esCanalMusicaDedicado, procesarMensajeCanalMusica } = require('../services/canalMusica');
+const { esCanalCriptaDedicado } = require('../services/canalCripta');
 const { procesarActividadTexto } = require('../services/actividad');
 
 module.exports = {
@@ -31,6 +32,12 @@ module.exports = {
             // ── 1. CANAL DEDICADO DE MÚSICA (Escribe directo sin /play) ──
             if (esCanalMusicaDedicado(guildId, message.channel.id)) {
                 return await procesarMensajeCanalMusica(message, client);
+            }
+
+            // ── 2. CANAL DEDICADO DE LA CRIPTA (Todo interactivo con botones, canal limpio) ──
+            if (esCanalCriptaDedicado(guildId, message.channel.id)) {
+                setTimeout(() => message.delete().catch(() => {}), 1000);
+                return;
             }
 
             let contenido = message.content?.trim() || '';
@@ -103,14 +110,6 @@ module.exports = {
             if (cmd === 'q') cmd = 'queue';
             if (cmd === 'v' || cmd === 'vol') cmd = 'volume';
 
-            const comandosMusica = ['play', 'skip', 'stop', 'pause', 'resume', 'queue', 'np', 'volume', 'shuffle', 'loop'];
-            if (!comandosMusica.includes(cmd)) {
-                await procesarActividadTexto(message, client);
-                return;
-            }
-
-            const canalVoz = message.member?.voice?.channel;
-
             const responder = async (opciones) => {
                 try {
                     return await message.reply(opciones);
@@ -118,6 +117,85 @@ module.exports = {
                     return await message.channel.send(opciones).catch(() => {});
                 }
             };
+
+            // ── COMANDO DE TEXTO: ROBAR STICKER O EMOJI (!st, !steal) ──
+            if (cmd === 'st' || cmd === 'steal') {
+                const { procesarRobo } = require('../services/stickers');
+                let targetMessage = null;
+
+                // A. Si está respondiendo a un mensaje
+                if (message.reference && message.reference.messageId) {
+                    try {
+                        targetMessage = await message.channel.messages.fetch(message.reference.messageId);
+                    } catch {}
+                }
+
+                // B. Si pasó un enlace o ID en los argumentos
+                if (!targetMessage && args) {
+                    const linkMatch = args.match(/channels\/\d+\/\d+\/(?<id>\d+)/);
+                    const msgId = linkMatch?.groups?.id || (args.split(/\s+/)[0].match(/^\d{17,20}$/) ? args.split(/\s+/)[0] : null);
+                    if (msgId) {
+                        try {
+                            targetMessage = await message.channel.messages.fetch(msgId);
+                            args = args.replace(msgId, '').trim();
+                        } catch {}
+                    }
+                }
+
+                // C. Si no especificó, buscar el último mensaje con sticker o emoji en el canal
+                if (!targetMessage) {
+                    try {
+                        const recientes = await message.channel.messages.fetch({ limit: 15 });
+                        for (const m of recientes.values()) {
+                            if (m.id === message.id) continue;
+                            if (m.stickers?.size > 0 || m.attachments?.size > 0 || (m.content && /<a?:\w+:\d+>/.test(m.content))) {
+                                targetMessage = m;
+                                break;
+                            }
+                        }
+                    } catch {}
+                }
+
+                if (!targetMessage) {
+                    return responder({
+                        embeds: [basePremium(
+                            '❓ ¿Cómo usar !st / !steal?',
+                            'Para robar un sticker o emoji:\n\n' +
+                            '1️⃣ **Responde al mensaje** que tiene el sticker y escribe \`!st\` o \`!steal [nombre]\`\n' +
+                            '2️⃣ O usa el comando slash: \`/steal\`\n' +
+                            '3️⃣ O haz **clic derecho** en el mensaje -> **Apps** -> **Robar Sticker**',
+                            COLORES.naranja
+                        )],
+                    });
+                }
+
+                const nuevoNombre = args ? args.trim() : '';
+                const resultado = await procesarRobo({
+                    guild: message.guild,
+                    targetMessage,
+                    usuario: message.author,
+                    nuevoNombre,
+                });
+
+                if (resultado.error) {
+                    return responder({
+                        embeds: [basePremium('❌ Error al Robar', resultado.mensaje, COLORES.rojo)],
+                    });
+                }
+
+                return responder({
+                    embeds: resultado.embeds,
+                    components: resultado.components,
+                });
+            }
+
+            const comandosMusica = ['play', 'skip', 'stop', 'pause', 'resume', 'queue', 'np', 'volume', 'shuffle', 'loop'];
+            if (!comandosMusica.includes(cmd)) {
+                await procesarActividadTexto(message, client);
+                return;
+            }
+
+            const canalVoz = message.member?.voice?.channel;
 
             // ── COMANDO DE TEXTO: PLAY ──
             if (cmd === 'play') {

@@ -39,6 +39,12 @@ async function modificarHuesos(userId, guildId, delta, tipo, detalle = '') {
     if (!doc) return null;
 
     await registrarTransaccion(userId, guildId, tipo, delta, doc.huesos, detalle);
+
+    try {
+        const { solicitarActualizacionCripta } = require('./canalCripta');
+        solicitarActualizacionCripta(guildId);
+    } catch {}
+
     return doc;
 }
 

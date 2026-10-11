@@ -39,6 +39,12 @@ async function reclamarDiario(userId, guildId) {
         if (!actualizado) return { ok: false, motivo: 'conflicto' };
 
         await registrarTransaccion(userId, guildId, 'diario', premio, actualizado.huesos, `Racha ${racha}, x${multiplicador}`);
+
+        try {
+            const { solicitarActualizacionCripta } = require('./canalCripta');
+            solicitarActualizacionCripta(guildId);
+        } catch {}
+
         return { ok: true, premio, racha, multiplicador, usuario: actualizado };
     });
 

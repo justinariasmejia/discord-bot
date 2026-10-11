@@ -3,10 +3,13 @@
 const { iniciarServicioSalonFama } = require('../services/salonFama');
 const { reembolsarRondasPendientes } = require('../services/ruletaGrupal');
 const { reembolsarDuelosPendientes } = require('../services/duelos');
-const { iniciarServicioEventosAleatorios } = require('../services/eventos-aleatorios');
+const { iniciarServicioEventosAleatorios, limpiarMensajesExpiradosCanal } = require('../services/eventos-aleatorios');
 const { iniciarServicioCierre } = require('../services/cierre');
 const { setLogClient } = require('../services/logger');
 const { cargarCanalesMusica } = require('../services/canalMusica');
+const { cargarCanalesCripta } = require('../services/canalCripta');
+const { cargarCanalesAdminPanel } = require('../services/panelAdmin');
+const { iniciarServicioBackups } = require('../services/backup');
 const { iniciarServicioVoz } = require('../services/actividad');
 
 module.exports = {
@@ -21,19 +24,31 @@ module.exports = {
         // Inicializar el cliente del logger
         setLogClient(client);
 
-        // Sincronizar comandos slash al instante en todos los servidores
+        // Asegurar que no existan comandos duplicados a nivel de servidor
         try {
-            const comandosData = Array.from(client.commands.values()).map((c) => c.data.toJSON());
             for (const guild of client.guilds.cache.values()) {
-                await guild.commands.set(comandosData);
-                console.log(`⚡ Comandos slash actualizados (${comandosData.length} comandos) en: ${guild.name}`);
+                await guild.commands.set([]);
             }
         } catch (err) {
-            console.warn('⚠️ No se pudieron registrar comandos de servidor automáticamente:', err?.message || err);
+            console.warn('⚠️ No se pudieron limpiar comandos duplicados de servidor:', err?.message || err);
         }
 
         // Cargar configuración de canales dedicados de música
         await cargarCanalesMusica(client);
+
+        // Cargar panel permanente de La Cripta con Ranking en vivo
+        await cargarCanalesCripta(client);
+
+        // Cargar panel permanente de Administración
+        await cargarCanalesAdminPanel(client);
+
+        // Limpieza preventiva de mensajes de eventos o trivias expiradas en el canal
+        for (const guild of client.guilds.cache.values()) {
+            limpiarMensajesExpiradosCanal(client, guild.id).catch(() => null);
+        }
+
+        // Inicia el servicio de respaldos automáticos de base de datos cada 1 hora
+        iniciarServicioBackups(client);
 
         // Reembolsar apuestas y duelos pendientes tras un reinicio inesperado
         await reembolsarRondasPendientes();

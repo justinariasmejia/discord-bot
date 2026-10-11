@@ -1,4 +1,4 @@
-﻿// src/interactions/duelo.js
+// src/interactions/duelo.js
 // Manejador de botones y modales del sistema de duelos.
 const { MessageFlags } = require('discord.js');
 const Duelo = require('../models/Duelo');
@@ -43,6 +43,12 @@ module.exports = {
                 if (res.motivo === 'duelo_en_progreso') {
                     return interaction.reply({
                         content: '❌ Uno de los dos jugadores ya tiene un duelo pendiente o activo.',
+                        flags: MessageFlags.Ephemeral,
+                    });
+                }
+                if (res.motivo === 'blacklist') {
+                    return interaction.reply({
+                        content: '🚫 Uno de los participantes está en la lista negra y no puede participar en duelos.',
                         flags: MessageFlags.Ephemeral,
                     });
                 }

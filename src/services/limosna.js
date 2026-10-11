@@ -58,6 +58,11 @@ async function solicitarLimosna(userId, guildId) {
             'Limosna del fantasma compasivo'
         );
 
+        try {
+            const { solicitarActualizacionCripta } = require('./canalCripta');
+            solicitarActualizacionCripta(guildId);
+        } catch {}
+
         return {
             ok: true,
             premio,

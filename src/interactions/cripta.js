@@ -6,6 +6,8 @@ const {
     TextInputBuilder,
     TextInputStyle,
     ActionRowBuilder,
+    UserSelectMenuBuilder,
+    MessageFlags,
 } = require('discord.js');
 const { obtenerUsuario } = require('../services/economia');
 const { posicionRanking } = require('../services/economia');
@@ -14,7 +16,7 @@ const { cazar } = require('../services/cazar');
 const { obtenerRanking } = require('../services/ranking');
 const { iniciarRondaGrupal } = require('../services/ruletaGrupal');
 const configBalance = require('../data/config');
-const { logCaza } = require('../services/logger');
+const { logCaza, logDiario } = require('../services/logger');
 const { base, COLORES } = require('../utils/embeds');
 const {
     panelMenu,
@@ -24,6 +26,8 @@ const {
     panelCazar,
     panelRanking,
     panelMenuApuestas,
+    panelConsolaTragamonedas,
+    panelConsolaCaraCruz,
     panelAyuda,
     filaVolver,
 } = require('../utils/paneles');
@@ -59,6 +63,7 @@ module.exports = {
             await interaction.editReply(panelCazarAnimacion(2));
             await new Promise((resolve) => setTimeout(resolve, configBalance.CAZAR?.DELAY_ANIMACION_MS || 1200));
 
+            logCaza(interaction.guildId, duenoId, res).catch(() => null);
             return interaction.editReply(panelCazar(duenoId, res));
         }
 
@@ -77,9 +82,9 @@ module.exports = {
             return interaction.editReply(panelMenuApuestas(duenoId, usuario));
         }
 
-        // ── 5. Selección de Juego de Apuestas ──
-        if (accion === 'sel_juego') {
-            const juego = interaction.values[0];
+        // ── 5. Selección de Juego de Apuestas (Botones y Selects) ──
+        if (accion === 'sel_juego_btn' || accion === 'sel_juego') {
+            const juego = accion === 'sel_juego_btn' ? extra : interaction.values[0];
 
             if (juego === 'ruleta_grupal') {
                 await interaction.deferUpdate();
@@ -104,45 +109,15 @@ module.exports = {
             }
 
             if (juego === 'cara_cruz') {
-                const modal = new ModalBuilder()
-                    .setCustomId(`apuesta:modal:${duenoId}:cara_cruz`)
-                    .setTitle('🪙 Cara o Cruz (x2.0)');
-
-                const inputMonto = new TextInputBuilder()
-                    .setCustomId('monto')
-                    .setLabel('¿Cuántos huesos apuestas?')
-                    .setPlaceholder('Mínimo 10 huesos')
-                    .setStyle(TextInputStyle.Short)
-                    .setRequired(true);
-
-                const inputEleccion = new TextInputBuilder()
-                    .setCustomId('eleccion')
-                    .setLabel('¿Cara o Cruz?')
-                    .setPlaceholder('Escribe "cara" o "cruz"')
-                    .setStyle(TextInputStyle.Short)
-                    .setRequired(true);
-
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(inputMonto),
-                    new ActionRowBuilder().addComponents(inputEleccion)
-                );
-                return interaction.showModal(modal);
+                await interaction.deferUpdate();
+                const usuario = await obtenerUsuario(duenoId, interaction.guildId);
+                return interaction.editReply(panelConsolaCaraCruz(duenoId, usuario));
             }
 
             if (juego === 'tragamonedas') {
-                const modal = new ModalBuilder()
-                    .setCustomId(`apuesta:modal:${duenoId}:tragamonedas`)
-                    .setTitle('🎰 Tragamonedas de Halloween');
-
-                const inputMonto = new TextInputBuilder()
-                    .setCustomId('monto')
-                    .setLabel('¿Cuántos huesos apuestas?')
-                    .setPlaceholder('Mínimo 10 huesos')
-                    .setStyle(TextInputStyle.Short)
-                    .setRequired(true);
-
-                modal.addComponents(new ActionRowBuilder().addComponents(inputMonto));
-                return interaction.showModal(modal);
+                await interaction.deferUpdate();
+                const usuario = await obtenerUsuario(duenoId, interaction.guildId);
+                return interaction.editReply(panelConsolaTragamonedas(duenoId, usuario));
             }
         }
 
@@ -150,6 +125,9 @@ module.exports = {
         if (accion === 'diario') {
             await interaction.deferUpdate();
             const res = await reclamarDiario(duenoId, interaction.guildId);
+            if (res.ok) {
+                logDiario(interaction.guildId, duenoId, res).catch(() => null);
+            }
             return interaction.editReply(panelDiario(duenoId, res));
         }
 
@@ -167,6 +145,129 @@ module.exports = {
         if (accion === 'ayuda') {
             await interaction.deferUpdate();
             return interaction.editReply(panelAyuda(duenoId));
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // ── 9. ACCIONES DEL PANEL FIJO PERMANENTE (Respuestas efímeras) ──
+        // ════════════════════════════════════════════════════════════════════
+
+        // 🏹 Cazar desde el panel maestro
+        if (accion === 'hub_cazar') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const userId = interaction.user.id;
+            const res = await cazar(userId, interaction.guildId);
+
+            if (!res.ok) {
+                logCaza(interaction.guildId, userId, res).catch(() => null);
+                return interaction.editReply(panelCazar(userId, res));
+            }
+
+            await interaction.editReply(panelCazarAnimacion(1));
+            await new Promise((resolve) => setTimeout(resolve, configBalance.CAZAR?.DELAY_ANIMACION_MS || 1000));
+
+            await interaction.editReply(panelCazarAnimacion(2));
+            await new Promise((resolve) => setTimeout(resolve, configBalance.CAZAR?.DELAY_ANIMACION_MS || 1000));
+
+            logCaza(interaction.guildId, userId, res).catch(() => null);
+            return interaction.editReply(panelCazar(userId, res));
+        }
+
+        // 🎁 Reclamar Diario desde el panel maestro
+        if (accion === 'hub_diario') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const res = await reclamarDiario(interaction.user.id, interaction.guildId);
+            if (res.ok) {
+                logDiario(interaction.guildId, interaction.user.id, res).catch(() => null);
+            }
+            return interaction.editReply(panelDiario(interaction.user.id, res));
+        }
+
+        // 🎰 Menú de Apuestas desde el panel maestro
+        if (accion === 'hub_apostar') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const usuario = await obtenerUsuario(interaction.user.id, interaction.guildId);
+            return interaction.editReply(panelMenuApuestas(interaction.user.id, usuario));
+        }
+
+        // ⚔️ Duelo PvP: Menú desplegable para seleccionar contrincante
+        if (accion === 'hub_duelo') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const filaSelect = new ActionRowBuilder().addComponents(
+                new UserSelectMenuBuilder()
+                    .setCustomId(`cripta:hub_sel_duelo:${interaction.user.id}`)
+                    .setPlaceholder('🎯 Selecciona un cazador para retar a duelo...')
+                    .setMinValues(1)
+                    .setMaxValues(1)
+            );
+
+            const embedDuelo = base(
+                '⚔️ Desafío de Duelo PvP',
+                'Selecciona al cazador al que deseas desafiar por huesos.\n' +
+                'Ambos deberán reaccionar con rapidez cuando la campana fúnebre suene para quedarse con la apuesta.',
+                COLORES.rojo
+            );
+
+            return interaction.editReply({ embeds: [embedDuelo], components: [filaSelect] });
+        }
+
+        // ⚔️ Duelo PvP: Al seleccionar contrincante se abre el modal de apuesta
+        if (accion === 'hub_sel_duelo') {
+            const rivalId = interaction.values[0];
+            if (rivalId === interaction.user.id) {
+                return interaction.reply({
+                    content: '💀 No puedes retarte en duelo a ti mismo.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            const rivalUser = await interaction.client.users.fetch(rivalId).catch(() => null);
+            if (rivalUser?.bot) {
+                return interaction.reply({
+                    content: '🤖 Los autómatas no tienen alma ni huesos para apostar.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            const modal = new ModalBuilder()
+                .setCustomId(`duelo:modal_crear:${interaction.user.id}:${rivalId}`)
+                .setTitle(`⚔️ Duelo vs ${(rivalUser?.username || 'Rival').slice(0, 20)}`);
+
+            const inputMonto = new TextInputBuilder()
+                .setCustomId('monto')
+                .setLabel('¿Cuántos huesos apuestas?')
+                .setPlaceholder('Mínimo 10 huesos')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMaxLength(6);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(inputMonto));
+            return interaction.showModal(modal);
+        }
+
+        // 👤 Perfil del cazador desde el panel maestro
+        if (accion === 'hub_perfil') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const usuario = await obtenerUsuario(interaction.user.id, interaction.guildId);
+            const { posicion, total } = await posicionRanking(interaction.guildId, usuario.huesos);
+            return interaction.editReply(
+                panelPerfil(interaction.user.id, usuario, interaction.user.username, posicion, total, interaction.user.displayAvatarURL())
+            );
+        }
+
+        // ❓ Guía de Juego desde el panel maestro
+        if (accion === 'hub_ayuda') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            return interaction.editReply(panelAyuda(interaction.user.id));
+        }
+
+        // 🔄 Refrescar manualmente el Ranking en vivo
+        if (accion === 'hub_refresh') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const { actualizarPanelCripta } = require('../services/canalCripta');
+            await actualizarPanelCripta(interaction.client, interaction.guildId);
+            return interaction.editReply({
+                content: '🔄 ¡Tabla de clasificación en vivo actualizada con éxito!',
+            });
         }
     },
 };

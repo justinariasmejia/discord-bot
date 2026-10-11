@@ -13,7 +13,6 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('setup-musica')
         .setDescription('🎧 Configura el canal dedicado interactivo de música (pedidos directos sin /play)')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addChannelOption((opt) =>
             opt.setName('canal')
                 .setDescription('Canal de texto donde se fijará el reproductor y lista en tiempo real')
@@ -22,6 +21,15 @@ module.exports = {
         ),
 
     async ejecutar(interaction, client) {
+        const { esAdminAsync } = require('../services/evento');
+        const autorizado = await esAdminAsync(interaction.member, interaction.guildId);
+        if (!autorizado) {
+            return interaction.reply({
+                content: '🔒 No tienes permisos de administración ni un rol autorizado para configurar este canal.',
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const canal = interaction.options.getChannel('canal');
 

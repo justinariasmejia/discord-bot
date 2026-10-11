@@ -6,16 +6,24 @@ const {
     TextInputBuilder,
     TextInputStyle,
     ActionRowBuilder,
+    MessageFlags,
 } = require('discord.js');
+
+const { esSuperAdmin } = require('../services/evento');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('say')
-        .setDescription('📝 Abre una ventana para escribir un mensaje que el bot enviará')
-        // Por defecto solo quien pueda gestionar mensajes (se puede cambiar en Ajustes del servidor > Integraciones)
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+        .setDescription('📝 Abre una ventana para escribir un mensaje que el bot enviará'),
 
     async ejecutar(interaction) {
+        if (!esSuperAdmin(interaction.user.id) && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
+            return interaction.reply({
+                content: '❌ No tienes permisos para usar esta función.',
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
         const modal = new ModalBuilder().setCustomId('say:modal').setTitle('📝 Enviar mensaje como bot');
 
         const input = new TextInputBuilder()

@@ -1,10 +1,10 @@
-﻿// src/services/duelos.js
+// src/services/duelos.js
 // Sistema de duelos entre jugadores con juego de reacción y persistencia.
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const Duelo = require('../models/Duelo');
 const Usuario = require('../models/Usuario');
 const { modificarHuesos, obtenerUsuario } = require('./economia');
-const { obtenerConfig, eventoActivo } = require('./evento');
+const { obtenerConfig, eventoActivo, estaEnBlacklist } = require('./evento');
 const { conBloqueo } = require('../utils/locks');
 const { base, COLORES, formatoNum } = require('../utils/embeds');
 const config = require('../data/config');
@@ -63,6 +63,10 @@ function filaDispararDuelo(dueloId) {
 async function crearDuelo(guildId, canalId, retadorId, rivalId, monto) {
     const confEvento = await obtenerConfig(guildId);
     if (!eventoActivo(confEvento)) return { ok: false, motivo: 'evento_cerrado' };
+
+    if (estaEnBlacklist(retadorId, confEvento) || estaEnBlacklist(rivalId, confEvento)) {
+        return { ok: false, motivo: 'blacklist' };
+    }
 
     const retador = await obtenerUsuario(retadorId, guildId);
     monto = Math.trunc(Number(monto));
@@ -184,6 +188,11 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
     duelo.ganadorId = ganadorId;
     duelo.premioEntregado = premio;
     await duelo.save();
+
+    try {
+        const { logDuelo } = require('./logger');
+        logDuelo(duelo.guildId, ganadorId, perdedorId, premio).catch(() => null);
+    } catch {}
 
     // Actualizar estadísticas
     await Promise.all([

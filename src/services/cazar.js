@@ -52,6 +52,11 @@ async function cazar(userId, guildId) {
             `${botin.titulo} (x${multiplicador})`
         );
 
+        try {
+            const { solicitarActualizacionCripta } = require('./canalCripta');
+            solicitarActualizacionCripta(guildId);
+        } catch {}
+
         return {
             ok: true,
             tipo: botin.tipo,

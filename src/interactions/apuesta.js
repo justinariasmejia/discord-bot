@@ -1,28 +1,82 @@
-﻿// src/interactions/apuesta.js
-// Manejador central para las apuestas del casino: modales, animaciones y repetición.
+// src/interactions/apuesta.js
+// Manejador central para las apuestas del casino: animaciones fluidas, modales y botones directos.
+const {
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    MessageFlags,
+} = require('discord.js');
 const {
     apostarCaraCruz,
     apostarDados,
     apostarRuleta,
     apostarTragamonedas,
+    validarApuesta,
 } = require('../services/apuestas');
 const {
     panelAnimacionApuesta,
     panelResultadoApuesta,
+    filaVolver,
 } = require('../utils/paneles');
+const { obtenerUsuario } = require('../services/economia');
+const { logApuesta } = require('../services/logger');
+const { base, COLORES, formatoNum } = require('../utils/embeds');
 const config = require('../data/config');
+
+async function responderInicial(interaction, payload) {
+    try {
+        if (interaction.deferred || interaction.replied) {
+            return await interaction.editReply(payload);
+        }
+        if (interaction.isButton() || interaction.isAnySelectMenu()) {
+            return await interaction.update(payload);
+        }
+        return await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
+    } catch {
+        try {
+            if (interaction.deferred || interaction.replied) {
+                return await interaction.editReply(payload);
+            }
+            return await interaction.followUp({ ...payload, flags: MessageFlags.Ephemeral });
+        } catch {
+            /* interacción expirada o cerrada por Discord */
+        }
+    }
+}
 
 async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
     if (tipoJuego === 'cara_cruz') {
-        await interaction.editReply(panelAnimacionApuesta('cara_cruz'));
-        await new Promise((r) => setTimeout(r, config.APUESTAS.DELAY_ANIMACION_MS));
+        await responderInicial(interaction, panelAnimacionApuesta('cara_cruz', { monto, eleccion: extra }));
+        await new Promise((r) => setTimeout(r, 2200));
         const res = await apostarCaraCruz(duenoId, interaction.guildId, monto, extra);
+        if (res.ok) {
+            logApuesta(interaction.guildId, duenoId, res).catch(() => null);
+        }
+        return interaction.editReply(panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
+    }
+
+    if (tipoJuego === 'tragamonedas') {
+        await responderInicial(interaction, panelAnimacionApuesta('tragamonedas', 1));
+        await new Promise((r) => setTimeout(r, 900));
+
+        const res = await apostarTragamonedas(duenoId, interaction.guildId, monto);
+        if (res.ok && res.carretes) {
+            await interaction.editReply(panelAnimacionApuesta('tragamonedas', { s1: res.carretes[0] })).catch(() => null);
+            await new Promise((r) => setTimeout(r, 900));
+        }
+
+        if (res.ok) {
+            logApuesta(interaction.guildId, duenoId, res).catch(() => null);
+        }
         return interaction.editReply(panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
     }
 
     if (tipoJuego === 'dados') {
-        await interaction.editReply(panelAnimacionApuesta('dados'));
-        await new Promise((r) => setTimeout(r, config.APUESTAS.DELAY_ANIMACION_MS));
+        await responderInicial(interaction, panelAnimacionApuesta('dados'));
+        await new Promise((r) => setTimeout(r, config.APUESTAS.DELAY_ANIMACION_MS || 1500));
 
         let tipoTier = 'bajo';
         let valorExtra = null;
@@ -41,22 +95,9 @@ async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
     }
 
     if (tipoJuego === 'ruleta') {
-        await interaction.editReply(panelAnimacionApuesta('ruleta'));
-        await new Promise((r) => setTimeout(r, config.APUESTAS.DELAY_ANIMACION_MS));
+        await responderInicial(interaction, panelAnimacionApuesta('ruleta'));
+        await new Promise((r) => setTimeout(r, config.APUESTAS.DELAY_ANIMACION_MS || 1500));
         const res = await apostarRuleta(duenoId, interaction.guildId, monto, extra);
-        return interaction.editReply(panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
-    }
-
-    if (tipoJuego === 'tragamonedas') {
-        await interaction.editReply(panelAnimacionApuesta('tragamonedas', 1));
-        await new Promise((r) => setTimeout(r, 900));
-
-        const res = await apostarTragamonedas(duenoId, interaction.guildId, monto);
-        if (res.ok && res.carretes) {
-            await interaction.editReply(panelAnimacionApuesta('tragamonedas', { s1: res.carretes[0] }));
-            await new Promise((r) => setTimeout(r, 900));
-        }
-
         return interaction.editReply(panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
     }
 }
@@ -67,39 +108,183 @@ module.exports = {
     async ejecutar(interaction, partes) {
         const accion = partes[1];
         const duenoId = partes[2];
-        const tipoJuego = partes[3];
 
-        // ── Envío de modal de juego ──
-        if (accion === 'modal') {
-            await interaction.deferUpdate();
+        // ── 1. Girar Tragamonedas Directo (1 Clic) ──
+        if (accion === 'girar_traga') {
+            const montoRaw = partes[3]; // '10', '25', '50', '100', 'todo'
+            const usuario = await obtenerUsuario(duenoId, interaction.guildId);
+            const val = validarApuesta(usuario, montoRaw);
+            if (!val.valida) {
+                const embedError = base('❌ Apuesta Inválida', val.motivo, COLORES.rojo);
+                return responderInicial(interaction, { embeds: [embedError], components: [filaVolver(duenoId)] });
+            }
+            return resolverJuego(interaction, duenoId, 'tragamonedas', val.monto, 'none');
+        }
+
+        // ── 2. Abrir Modal de Tragamonedas (Monto Personalizado) ──
+        if (accion === 'abrir_modal_traga') {
+            const modal = new ModalBuilder()
+                .setCustomId(`apuesta:modal_traga:${duenoId}`)
+                .setTitle('🎰 Tragamonedas • Tu Apuesta');
+
+            const inputMonto = new TextInputBuilder()
+                .setCustomId('monto')
+                .setLabel('¿Cuántos huesos deseas apostar?')
+                .setPlaceholder('Mínimo 10 huesos (o escribe "todo")')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMaxLength(8);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(inputMonto));
+            return interaction.showModal(modal);
+        }
+
+        // ── 3. Envío del Modal de Tragamonedas ──
+        if (accion === 'modal_traga') {
             const montoStr = interaction.fields.getTextInputValue('monto');
-            const monto = parseInt(montoStr, 10);
+            const usuario = await obtenerUsuario(duenoId, interaction.guildId);
+            const val = validarApuesta(usuario, montoStr);
+            if (!val.valida) {
+                const embedError = base('❌ Apuesta Inválida', val.motivo, COLORES.rojo);
+                return responderInicial(interaction, { embeds: [embedError], components: [filaVolver(duenoId)] });
+            }
+            return resolverJuego(interaction, duenoId, 'tragamonedas', val.monto, 'none');
+        }
 
-            let extra = 'none';
-            if (tipoJuego === 'cara_cruz') {
-                const el = interaction.fields.getTextInputValue('eleccion').trim().toLowerCase();
-                extra = el.includes('cruz') ? 'cruz' : 'cara';
-            } else if (tipoJuego === 'dados') {
-                const t = interaction.fields.getTextInputValue('tier').trim().toLowerCase();
-                if (t.includes('alto')) extra = 'alto';
-                else if (t.includes('exacto')) extra = t; // ej: exacto:8
-                else extra = 'bajo';
-            } else if (tipoJuego === 'ruleta') {
-                const c = interaction.fields.getTextInputValue('color').trim().toLowerCase();
-                if (c.includes('negro')) extra = 'negro';
-                else if (c.includes('verde')) extra = 'verde';
-                else extra = 'rojo';
+        // ── 4. Elegir Monto de Cara o Cruz (Botón 1 Clic) ──
+        if (accion === 'elegir_cc') {
+            const montoRaw = partes[3];
+            const usuario = await obtenerUsuario(duenoId, interaction.guildId);
+            const val = validarApuesta(usuario, montoRaw);
+            if (!val.valida) {
+                const embedError = base('❌ Apuesta Inválida', val.motivo, COLORES.rojo);
+                return responderInicial(interaction, { embeds: [embedError], components: [filaVolver(duenoId)] });
             }
 
+            const monto = val.monto;
+            const embedElegir = base(
+                '🪙 Cara o Cruz • Elige tu Lado',
+                `🦴 Has seleccionado apostar: **${formatoNum(monto)}** huesos.\n\n` +
+                `¿Por cuál te la juegas ante las ánimas del más allá?\n` +
+                `• **👤 Cara** (Multiplicador x2.0)\n` +
+                `• **✝️ Cruz** (Multiplicador x2.0)\n\n` +
+                `_Presiona un botón para lanzar la moneda giratoria:_`,
+                COLORES.morado
+            );
+
+            const filaElegir = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`apuesta:resolver:${duenoId}:cara_cruz:${monto}:cara`)
+                    .setLabel('Apostar a CARA')
+                    .setEmoji('👤')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId(`apuesta:resolver:${duenoId}:cara_cruz:${monto}:cruz`)
+                    .setLabel('Apostar a CRUZ')
+                    .setEmoji('✝️')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId(`cripta:sel_juego_btn:${duenoId}:cara_cruz`)
+                    .setLabel('Cambiar Monto')
+                    .setEmoji('⬅️')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+
+            return responderInicial(interaction, { embeds: [embedElegir], components: [filaElegir] });
+        }
+
+        // ── 5. Abrir Modal de Cara o Cruz (Monto Personalizado) ──
+        if (accion === 'abrir_modal_cc') {
+            const modal = new ModalBuilder()
+                .setCustomId(`apuesta:modal_cc:${duenoId}`)
+                .setTitle('🪙 Cara o Cruz • Tu Apuesta');
+
+            const inputMonto = new TextInputBuilder()
+                .setCustomId('monto')
+                .setLabel('¿Cuántos huesos deseas apostar?')
+                .setPlaceholder('Mínimo 10 huesos (o escribe "todo")')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMaxLength(8);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(inputMonto));
+            return interaction.showModal(modal);
+        }
+
+        // ── 6. Envío del Modal de Cara o Cruz ──
+        if (accion === 'modal_cc') {
+            const montoStr = interaction.fields.getTextInputValue('monto');
+            const usuario = await obtenerUsuario(duenoId, interaction.guildId);
+            const val = validarApuesta(usuario, montoStr);
+            if (!val.valida) {
+                const embedError = base('❌ Apuesta Inválida', val.motivo, COLORES.rojo);
+                return responderInicial(interaction, { embeds: [embedError], components: [filaVolver(duenoId)] });
+            }
+
+            const monto = val.monto;
+            const embedElegir = base(
+                '🪙 Cara o Cruz • Elige tu Lado',
+                `🦴 Has seleccionado apostar: **${formatoNum(monto)}** huesos.\n\n` +
+                `¿Por cuál te la juegas ante las ánimas del más allá?\n` +
+                `• **👤 Cara** (Multiplicador x2.0)\n` +
+                `• **✝️ Cruz** (Multiplicador x2.0)\n\n` +
+                `_Presiona un botón para lanzar la moneda giratoria:_`,
+                COLORES.morado
+            );
+
+            const filaElegir = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`apuesta:resolver:${duenoId}:cara_cruz:${monto}:cara`)
+                    .setLabel('Apostar a CARA')
+                    .setEmoji('👤')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId(`apuesta:resolver:${duenoId}:cara_cruz:${monto}:cruz`)
+                    .setLabel('Apostar a CRUZ')
+                    .setEmoji('✝️')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId(`cripta:sel_juego_btn:${duenoId}:cara_cruz`)
+                    .setLabel('Cambiar Monto')
+                    .setEmoji('⬅️')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+
+            return responderInicial(interaction, { embeds: [embedElegir], components: [filaElegir] });
+        }
+
+        // ── 7. Botón de Resolución (ej. cara o cruz tras elegir lado) ──
+        if (accion === 'resolver') {
+            const tipoJuego = partes[3];
+            const monto = parseInt(partes[4], 10);
+            const extra = partes[5] || 'cara';
             return resolverJuego(interaction, duenoId, tipoJuego, monto, extra);
         }
 
-        // ── Botón Apostar de nuevo ──
+        // ── 8. Botón Apostar de nuevo ──
         if (accion === 'repetir') {
-            await interaction.deferUpdate();
+            const tipoJuego = partes[3];
             const monto = parseInt(partes[4], 10);
             const extra = partes[5] || 'none';
             return resolverJuego(interaction, duenoId, tipoJuego, monto, extra);
+        }
+
+        // ── 9. Modal heredado (antiguos select menus) ──
+        if (accion === 'modal') {
+            const tipoJuego = partes[3];
+            const montoStr = interaction.fields.getTextInputValue('monto');
+            let extra = 'none';
+            if (tipoJuego === 'cara_cruz') {
+                const el = (interaction.fields.getTextInputValue('eleccion') || 'cara').trim().toLowerCase();
+                extra = el.includes('cruz') ? 'cruz' : 'cara';
+            }
+            const usuario = await obtenerUsuario(duenoId, interaction.guildId);
+            const val = validarApuesta(usuario, montoStr);
+            if (!val.valida) {
+                const embedError = base('❌ Apuesta Inválida', val.motivo, COLORES.rojo);
+                return responderInicial(interaction, { embeds: [embedError], components: [filaVolver(duenoId)] });
+            }
+            return resolverJuego(interaction, duenoId, tipoJuego, val.monto, extra);
         }
     },
 };

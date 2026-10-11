@@ -14,7 +14,7 @@ async function responderError(interaction, texto) {
 
 const COMANDOS_EVENTO = ['cripta', 'duelo', 'ayuda'];
 const PREFIJOS_EVENTO = ['cripta', 'duelo', 'evento', 'apuesta', 'ruleta_grupal'];
-const { obtenerConfig, puedeInteractuarEvento } = require('../services/evento');
+const { obtenerConfig, puedeInteractuarEvento, esSuperAdmin } = require('../services/evento');
 
 module.exports = {
     name: 'interactionCreate',
@@ -22,7 +22,7 @@ module.exports = {
     async ejecutar(interaction, client) {
         try {
             // ── Slash commands ──
-            if (interaction.isChatInputCommand()) {
+            if (interaction.isChatInputCommand() || interaction.isContextMenuCommand()) {
                 const comando = client.commands.get(interaction.commandName);
                 if (!comando) return;
                 if (!interaction.inGuild()) {
@@ -60,9 +60,9 @@ module.exports = {
                     }
                 }
 
-                // Solo quien abrió el panel puede usar sus botones (excepto música y eventos comunitarios abiertos a todos)
+                // Solo quien abrió el panel puede usar sus botones (excepto música, eventos comunitarios y super-admin)
                 const dueno = partes[2];
-                if (prefijo !== 'musica' && dueno && dueno !== 'todos' && /^\d+$/.test(dueno) && dueno !== interaction.user.id) {
+                if (!esSuperAdmin(interaction.user.id) && prefijo !== 'musica' && dueno && dueno !== 'todos' && /^\d+$/.test(dueno) && dueno !== interaction.user.id) {
                     return interaction.reply({
                         content: '🔒 Este panel no es tuyo. Usa `/cripta` para abrir el tuyo.',
                         flags: MessageFlags.Ephemeral,

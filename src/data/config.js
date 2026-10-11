@@ -19,7 +19,7 @@ module.exports = {
         VOZ: {
             INTERVALO_MS: 2.5 * 60 * 1000, // Chequeo cada 2.5 minutos
             HUESOS_POR_INTERVALO: 6,       // ~140 huesos por hora activa en llamada
-            MINIMO_MIEMBROS: 2,            // Mínimo 2 personas en la sala
+            MINIMO_MIEMBROS: 1,            // Todos los canales de voz premian miembros activos
         },
     },
 

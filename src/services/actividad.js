@@ -1,7 +1,7 @@
 // src/services/actividad.js
 // Sistema de recompensas por actividad en la comunidad (mensajes en chat y tiempo en salas de voz).
 const { modificarHuesos, obtenerUsuario } = require('./economia');
-const { obtenerConfig, eventoActivo, multiplicadorActual } = require('./evento');
+const { obtenerConfig, eventoActivo, multiplicadorActual, estaEnBlacklist } = require('./evento');
 const config = require('../data/config');
 
 // Cooldown de mensajes en memoria: Map<userId, timestamp>
@@ -31,6 +31,9 @@ async function procesarActividadTexto(message, client) {
 
         const conf = await obtenerConfig(guildId);
         if (!eventoActivo(conf)) return;
+
+        // Si el usuario o su rol está en la lista negra, no recibe recompensas
+        if (estaEnBlacklist(message.member, conf)) return;
 
         // Si está en Modo Test, solo procesar actividad para admins en el canal de pruebas
         if (conf.modoTest) {
@@ -78,22 +81,26 @@ function iniciarServicioVoz(client) {
         try {
             for (const guild of client.guilds.cache.values()) {
                 const conf = await obtenerConfig(guild.id);
-                if (!eventoActivo(conf) || conf.modoTest) continue;
+                if (!eventoActivo(conf)) continue;
 
                 const mult = multiplicadorActual(conf);
                 const canalesVoz = guild.channels.cache.filter((c) => c.isVoiceBased());
+                let algunRecompensado = false;
 
                 for (const canal of canalesVoz.values()) {
                     // Filtrar miembros no-bot
                     const miembros = canal.members.filter((m) => !m.user.bot);
-                    const minimoRequerido = config.ACTIVIDAD?.VOZ?.MINIMO_MIEMBROS || 2;
+                    const minimoRequerido = config.ACTIVIDAD?.VOZ?.MINIMO_MIEMBROS || 1;
 
-                    // Mínimo 2 personas en la sala para evitar AFK farming solitario
+                    // Mínimo 1 persona en la sala para premiar actividad en cualquier canal de voz
                     if (miembros.size < minimoRequerido) continue;
 
                     for (const miembro of miembros.values()) {
                         // Si está ensordecido (deaf / selfDeaf), no está participando activamente
                         if (miembro.voice.deaf || miembro.voice.selfDeaf) continue;
+
+                        // Si el usuario o su rol está en la lista negra, no recibe recompensas
+                        if (estaEnBlacklist(miembro, conf)) continue;
 
                         const baseHuesos = config.ACTIVIDAD?.VOZ?.HUESOS_POR_INTERVALO || 6;
                         const totalHuesos = Math.round(baseHuesos * mult);
@@ -106,7 +113,14 @@ function iniciarServicioVoz(client) {
                             'actividad_voz',
                             `Actividad en canal de voz: ${canal.name}`
                         ).catch(() => null);
+
+                        algunRecompensado = true;
                     }
+                }
+
+                if (algunRecompensado) {
+                    const { solicitarActualizacionCripta } = require('./canalCripta');
+                    solicitarActualizacionCripta(guild.id);
                 }
             }
         } catch (err) {
@@ -114,7 +128,7 @@ function iniciarServicioVoz(client) {
         }
     }, intervaloMs);
 
-    console.log(`🎙️ Servicio de Actividad de Voz iniciado (chequeo cada ${Math.round(intervaloMs / 60000)}m).`);
+    console.log(`🎙️ Servicio de Actividad de Voz iniciado (chequeo cada ${Math.round(intervaloMs / 60000)}m en todos los canales de voz).`);
 }
 
 module.exports = {

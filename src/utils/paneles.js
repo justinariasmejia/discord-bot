@@ -232,58 +232,167 @@ function panelRanking(duenoId, datos) {
 
 // ─── APUESTAS ───
 function panelMenuApuestas(duenoId, usuario) {
-    const maxPermitido = Math.min(
-        Math.floor(usuario.huesos * config.APUESTAS.MAXIMO_PORCENTAJE),
-        config.APUESTAS.MAXIMA_ABSOLUTA
-    );
+    const maxPermitido = Math.min(usuario.huesos, config.APUESTAS.MAXIMA_ABSOLUTA || 5000);
 
     const desc = `🎲 **El Antro de las Ánimas — Apuestas**\n` +
-        `Elige tu juego en el menú desplegable:\n\n` +
-        `🪙 **Cara o Cruz**: Lanza la moneda espectral. 50% prob. | Paga **x2.0**\n` +
+        `Selecciona el juego que deseas jugar con los botones de abajo:\n\n` +
+        `🪙 **Cara o Cruz**: Lanza la moneda espectral giratoria. 50% prob. | Paga **x2.0**\n` +
         `🎰 **Tragamonedas**: 3 carretes de Halloween (🎃 👻 💀 🦴 🕷️) | Hasta **x15.0**\n` +
-        `👥 **Ruleta Grupal**: Ronda pública de 30s en el canal donde todos pueden apostar\n\n` +
+        `👥 **Ruleta Grupal**: Ronda pública comunitaria de 30s en el canal\n\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
         `🦴 **Tus huesos disponibles:** ${formatoNum(usuario.huesos)}\n` +
         `⚖️ **Límites:** Mínimo **${config.APUESTAS.MINIMA}** | Máximo **${formatoNum(maxPermitido)}** huesos`;
 
     const embed = base('🎰 El Antro de las Ánimas — Apuestas', desc, COLORES.morado);
 
-    const selectJuegos = new StringSelectMenuBuilder()
-        .setCustomId(`cripta:sel_juego:${duenoId}`)
-        .setPlaceholder('Elige un juego para apostar...')
-        .addOptions([
-            {
-                label: 'Cara o Cruz',
-                value: 'cara_cruz',
-                description: 'Lanza la moneda espectral y duplica tus huesos (x2.0)',
-                emoji: '🪙',
-            },
-            {
-                label: 'Tragamonedas de Halloween',
-                value: 'tragamonedas',
-                description: 'Gira los 3 carretes malditos y alinea símbolos (hasta x15.0)',
-                emoji: '🎰',
-            },
-            {
-                label: 'Ruleta Grupal (Pública)',
-                value: 'ruleta_grupal',
-                description: 'Inicia una ronda comunitaria de 30s en el canal',
-                emoji: '👥',
-            },
-        ]);
+    const filaBotones = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`cripta:sel_juego_btn:${duenoId}:cara_cruz`)
+            .setLabel('Cara o Cruz (x2.0)')
+            .setEmoji('🪙')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(usuario.huesos < config.APUESTAS.MINIMA),
+        new ButtonBuilder()
+            .setCustomId(`cripta:sel_juego_btn:${duenoId}:tragamonedas`)
+            .setLabel('Tragamonedas (x15.0)')
+            .setEmoji('🎰')
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(usuario.huesos < config.APUESTAS.MINIMA),
+        new ButtonBuilder()
+            .setCustomId(`cripta:sel_juego_btn:${duenoId}:ruleta_grupal`)
+            .setLabel('Ruleta Grupal (30s)')
+            .setEmoji('👥')
+            .setStyle(ButtonStyle.Secondary)
+    );
 
-    const filaSelect = new ActionRowBuilder().addComponents(selectJuegos);
-    return { embeds: [embed], components: [filaSelect, filaVolver(duenoId)] };
+    return { embeds: [embed], components: [filaBotones, filaVolver(duenoId)] };
+}
+
+function panelConsolaTragamonedas(duenoId, usuario) {
+    const desc = `🎰 **Tragamonedas de Halloween • Carretes Malditos**\n` +
+        `> *¡Gira los 3 carretes de ultratumba y alinea los símbolos de Halloween para ganar hasta x15 tu apuesta!*\n\n` +
+        `🎃 **Trío de Calabazas:** x15.0\n` +
+        `👻 **Trío de Fantasmas:** x8.0\n` +
+        `💀 **Trío de Calaveras:** x5.0\n` +
+        `🦴 **Trío de Huesos:** x3.0\n` +
+        `🕷️ **Trío de Arañas:** x2.0\n` +
+        `🦴🦴 **Dos Huesos:** x1.5\n` +
+        `✨ **Par de símbolos:** x1.2\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🦴 **Tus huesos disponibles:** ${formatoNum(usuario.huesos)}\n` +
+        `_Selecciona tu apuesta para girar al instante:_`;
+
+    const embed = base('🎰 Tragamonedas de Halloween', desc, COLORES.naranja);
+
+    const fila1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`apuesta:girar_traga:${duenoId}:10`)
+            .setLabel('Tirar 10 🦴')
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(usuario.huesos < 10),
+        new ButtonBuilder()
+            .setCustomId(`apuesta:girar_traga:${duenoId}:25`)
+            .setLabel('Tirar 25 🦴')
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(usuario.huesos < 25),
+        new ButtonBuilder()
+            .setCustomId(`apuesta:girar_traga:${duenoId}:50`)
+            .setLabel('Tirar 50 🦴')
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(usuario.huesos < 50),
+        new ButtonBuilder()
+            .setCustomId(`apuesta:girar_traga:${duenoId}:100`)
+            .setLabel('Tirar 100 🦴')
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(usuario.huesos < 100)
+    );
+
+    const fila2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`apuesta:girar_traga:${duenoId}:todo`)
+            .setLabel('Apostar Todo 🔥')
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(usuario.huesos < 10),
+        new ButtonBuilder()
+            .setCustomId(`apuesta:abrir_modal_traga:${duenoId}`)
+            .setLabel('Otro Monto ✏️')
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId(`cripta:apostar:${duenoId}`)
+            .setLabel('Volver')
+            .setEmoji('⬅️')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    return { embeds: [embed], components: [fila1, fila2] };
+}
+
+function panelConsolaCaraCruz(duenoId, usuario) {
+    const desc = `🪙 **Cara o Cruz • Lanza la Moneda Espectral**\n` +
+        `> *50% de probabilidad de duplicar tus huesos (**x2.0**) con la moneda giratoria.*\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🦴 **Tus huesos disponibles:** ${formatoNum(usuario.huesos)}\n` +
+        `_Selecciona tu apuesta y luego elige Cara o Cruz:_`;
+
+    const embed = base('🪙 Cara o Cruz (x2.0)', desc, COLORES.morado);
+
+    const fila1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`apuesta:elegir_cc:${duenoId}:10`)
+            .setLabel('Apostar 10 🦴')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(usuario.huesos < 10),
+        new ButtonBuilder()
+            .setCustomId(`apuesta:elegir_cc:${duenoId}:25`)
+            .setLabel('Apostar 25 🦴')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(usuario.huesos < 25),
+        new ButtonBuilder()
+            .setCustomId(`apuesta:elegir_cc:${duenoId}:50`)
+            .setLabel('Apostar 50 🦴')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(usuario.huesos < 50),
+        new ButtonBuilder()
+            .setCustomId(`apuesta:elegir_cc:${duenoId}:100`)
+            .setLabel('Apostar 100 🦴')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(usuario.huesos < 100)
+    );
+
+    const fila2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`apuesta:elegir_cc:${duenoId}:todo`)
+            .setLabel('Apostar Todo 🔥')
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(usuario.huesos < 10),
+        new ButtonBuilder()
+            .setCustomId(`apuesta:abrir_modal_cc:${duenoId}`)
+            .setLabel('Otro Monto ✏️')
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId(`cripta:apostar:${duenoId}`)
+            .setLabel('Volver')
+            .setEmoji('⬅️')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    return { embeds: [embed], components: [fila1, fila2] };
 }
 
 function panelAnimacionApuesta(juego, frame = 1) {
+    const { EMOJIS } = require('./emojis');
     let titulo = '🎰 Apostando...';
     let descripcion = 'La suerte de ultratumba está decidiéndose...';
     let color = COLORES.morado;
 
     if (juego === 'cara_cruz') {
-        titulo = '🪙 Lanzando la moneda maldita...';
-        descripcion = 'La moneda gira en el aire entre sombras... ¿Cara o Cruz?';
+        const moneda = EMOJIS.monedaGirando || '<a:moneda:1307467940995666052>';
+        titulo = `${moneda} ¡Lanzando la Moneda Maldita...!`;
+        descripcion = `# ${moneda} Girando en las Sombras...\n\n` +
+            `> *La moneda da vueltas en el aire ante los ojos de las ánimas...*\n\n` +
+            `🪙 **Apuesta:** ${typeof frame === 'object' && frame.monto ? `**${formatoNum(frame.monto)}** huesos 🦴` : 'En curso'}\n` +
+            `🎯 **Elección:** ${typeof frame === 'object' && frame.eleccion ? `**${frame.eleccion.toUpperCase()}**` : '...'}\n\n` +
+            `⏳ _Esperando a que aterrice sobre las lápidas..._`;
     } else if (juego === 'tragamonedas') {
         titulo = '🎰 Girando carretes de Halloween...';
         descripcion = typeof frame === 'object' && frame.s1
@@ -295,12 +404,13 @@ function panelAnimacionApuesta(juego, frame = 1) {
 }
 
 function panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra) {
-    if (!res.ok) {
+    if (!res || !res.ok) {
         let mensaje = 'No se pudo procesar la apuesta.';
-        if (res.motivo === 'saldo_insuficiente') mensaje = 'No tienes suficientes huesos para esta apuesta.';
-        if (res.motivo === 'cooldown') mensaje = `Espera **${Math.ceil((res.restanteMs || 3000) / 1000)}s** antes de volver a apostar.`;
-        if (res.motivo === 'invalido') mensaje = res.detalle;
-        if (res.motivo === 'evento_cerrado') mensaje = 'La Cripta ya ha cerrado sus puertas.';
+        if (res?.motivo === 'saldo_insuficiente') mensaje = 'No tienes suficientes huesos para esta apuesta.';
+        if (res?.motivo === 'cooldown') mensaje = `Espera **${Math.ceil((res.restanteMs || 3000) / 1000)}s** antes de volver a apostar.`;
+        if (res?.motivo === 'invalido') mensaje = res.detalle || 'Monto o apuesta inválida.';
+        if (res?.motivo === 'ocupado') mensaje = 'Se está procesando otra acción con tus huesos. Inténtalo de nuevo.';
+        if (res?.motivo === 'evento_cerrado') mensaje = 'La Cripta ya ha cerrado sus puertas por esta temporada.';
 
         const embedError = base('❌ Apuesta Rechazada', mensaje, COLORES.rojo);
         return { embeds: [embedError], components: [filaVolver(duenoId)] };
@@ -312,12 +422,15 @@ function panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra) {
     let descripcion = '';
 
     if (res.juego === 'cara_cruz') {
-        descripcion = `🪙 La moneda cayó en: **${res.resultado.toUpperCase()}**\n` +
-            `Tu predicción: **${res.eleccion.toUpperCase()}**\n\n`;
+        const lado = (res.resultado || res.resultadoLado || 'cara').toUpperCase();
+        const iconoLado = lado === 'CARA' ? '👤' : '✝️';
+        descripcion = `## ${res.gana ? '🎉 ¡Victoria Espectral!' : '💀 ¡La Moneda ha Caído!'}\n\n` +
+            `🪙 La moneda cayó en: **${iconoLado} ${lado}**\n` +
+            `🎯 Tu elección: **${(res.eleccion || '').toUpperCase()}**\n\n`;
         if (res.gana) {
-            descripcion += `💰 ¡Has ganado **+${formatoNum(res.premio)}** huesos! 🦴\n`;
+            descripcion += `💰 ¡Has ganado **+${formatoNum(res.premio)}** huesos! 🦴 (x2.0)\n`;
         } else {
-            descripcion += `🩸 Has perdido **-${formatoNum(res.monto)}** huesos.\n`;
+            descripcion += `🩸 Has perdido **-${formatoNum(res.monto)}** huesos 🦴.\n`;
         }
         descripcion += `🦴 Saldo actual: **${formatoNum(res.saldoFinal)}** huesos.`;
     } else if (res.juego === 'tragamonedas') {
@@ -392,6 +505,8 @@ module.exports = {
     panelCazar,
     panelRanking,
     panelMenuApuestas,
+    panelConsolaTragamonedas,
+    panelConsolaCaraCruz,
     panelAnimacionApuesta,
     panelResultadoApuesta,
     panelAyuda,

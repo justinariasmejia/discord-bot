@@ -10,6 +10,63 @@ const { modificarHuesos, obtenerUsuario } = require('./economia');
 const { obtenerConfig, eventoActivo, obtenerCanalApariciones } = require('./evento');
 const { base, COLORES, formatoNum, tiempoRelativo } = require('../utils/embeds');
 
+/**
+ * Elimina un mensaje de forma robusta probando el objeto mensaje y canal.messages
+ */
+async function eliminarMensajeSeguro(canal, mensajeId, mensajeObj = null) {
+    try {
+        if (mensajeObj && mensajeObj.delete) {
+            const ok = await mensajeObj.delete().then(() => true).catch(() => false);
+            if (ok) return true;
+        }
+        if (canal && mensajeId) {
+            const ok2 = await canal.messages.delete(mensajeId).then(() => true).catch(() => false);
+            if (ok2) return true;
+            const m = await canal.messages.fetch(mensajeId).catch(() => null);
+            if (m) return await m.delete().then(() => true).catch(() => false);
+        }
+    } catch {
+        return false;
+    }
+    return false;
+}
+
+/**
+ * Escanea el canal de eventos y elimina mensajes expirados residuales para evitar spam.
+ */
+async function limpiarMensajesExpiradosCanal(client, guildId) {
+    try {
+        const config = await obtenerConfig(guildId);
+        const canalId = obtenerCanalApariciones(config);
+        if (!canalId) return;
+
+        const canal = client.channels.cache.get(canalId) || (await client.channels.fetch(canalId).catch(() => null));
+        if (!canal || !canal.isTextBased()) return;
+
+        const mensajes = await canal.messages.fetch({ limit: 40 }).catch(() => null);
+        if (!mensajes) return;
+
+        for (const msg of mensajes.values()) {
+            if (msg.author.id !== client.user.id) continue;
+            const titulo = msg.embeds?.[0]?.title || '';
+            const desc = msg.embeds?.[0]?.description || '';
+            if (
+                titulo.includes('Tiempo Agotado') ||
+                titulo.includes('desvanecido') ||
+                titulo.includes('RESUELTA CON ÉXITO') ||
+                titulo.includes('CAPTURADO') ||
+                desc.includes('Nadie respondió correctamente') ||
+                desc.includes('se desvaneció') ||
+                desc.includes('sepultados por la niebla')
+            ) {
+                await msg.delete().catch(() => null);
+            }
+        }
+    } catch (err) {
+        console.error('⚠️ Error limpiando mensajes expirados del canal:', err?.message || err);
+    }
+}
+
 // ── 1. FANTASMA FUGAZ ──
 async function aparecerFantasma(guildId, client) {
     const config = await obtenerConfig(guildId);
@@ -61,10 +118,13 @@ async function aparecerFantasma(guildId, client) {
             await ev.save();
             const embedExpirado = base(
                 '💨 El Fantasma se ha desvanecido',
-                'Nadie fue lo suficientemente rápido y el espectro se perdió entre las sombras de la noche.',
+                'Nadie fue lo suficientemente rápido y el espectro se perdió entre las sombras de la noche.\n\n_Este mensaje desaparecerá en breve._',
                 COLORES.negro
             );
-            mensaje.edit({ embeds: [embedExpirado], components: [] }).catch(() => null);
+            await mensaje.edit({ embeds: [embedExpirado], components: [] }).catch(() => null);
+            setTimeout(async () => {
+                await eliminarMensajeSeguro(canal, mensaje.id, mensaje);
+            }, 8000);
         }
     }, 60 * 1000);
 
@@ -132,10 +192,14 @@ async function lanzarTrivia(guildId, client) {
                 '⏳ Tiempo Agotado en la Trivia',
                 `Nadie respondió correctamente a tiempo.\n\n` +
                 `✅ **Respuesta correcta:** [${letras[triviaItem.correcta]}] ${triviaItem.opciones[triviaItem.correcta]}\n` +
-                `📖 _${triviaItem.explicacion}_`,
+                `📖 _${triviaItem.explicacion}_\n\n` +
+                `_Este mensaje desaparecerá en breve._`,
                 COLORES.negro
             );
-            mensaje.edit({ embeds: [embedExpirado], components: [] }).catch(() => null);
+            await mensaje.edit({ embeds: [embedExpirado], components: [] }).catch(() => null);
+            setTimeout(async () => {
+                await eliminarMensajeSeguro(canal, mensaje.id, mensaje);
+            }, 8000);
         }
     }, 90 * 1000);
 
@@ -192,10 +256,13 @@ async function aparecerHuesos(guildId, client) {
             await ev.save();
             const embedExpirado = base(
                 '🥀 Los Huesos se han desvanecido',
-                'Nadie fue lo suficientemente rápido y los huesos fueron sepultados por la niebla nocturna.',
+                'Nadie fue lo suficientemente rápido y los huesos fueron sepultados por la niebla nocturna.\n\n_Este mensaje desaparecerá en breve._',
                 COLORES.negro
             );
-            mensaje.edit({ embeds: [embedExpirado], components: [] }).catch(() => null);
+            await mensaje.edit({ embeds: [embedExpirado], components: [] }).catch(() => null);
+            setTimeout(async () => {
+                await eliminarMensajeSeguro(canal, mensaje.id, mensaje);
+            }, 8000);
         }
     }, 90 * 1000);
 
@@ -275,4 +342,6 @@ module.exports = {
     activarMultiplicadorGlobal,
     forzarEvento,
     iniciarServicioEventosAleatorios,
+    limpiarMensajesExpiradosCanal,
+    eliminarMensajeSeguro,
 };

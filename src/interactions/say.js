@@ -1,6 +1,7 @@
-﻿// src/interactions/say.js
+// src/interactions/say.js
 // Manejador del modal del comando /say.
 const { MessageFlags, PermissionFlagsBits } = require('discord.js');
+const { esSuperAdmin } = require('../services/evento');
 
 module.exports = {
     prefijo: 'say',
@@ -9,7 +10,7 @@ module.exports = {
         const accion = partes[1];
 
         if (accion === 'modal') {
-            if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
+            if (!esSuperAdmin(interaction.user.id) && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
                 return interaction.reply({
                     content: '❌ No tienes permisos para usar esta función.',
                     flags: MessageFlags.Ephemeral,

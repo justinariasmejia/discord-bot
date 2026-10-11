@@ -6,11 +6,23 @@ const configSchema = new Schema({
     canalEventosId: { type: String, default: null },       // Eventos aleatorios comunitarios
     canalSalonFamaId: { type: String, default: null },     // Ranking fijo (top 5 en vivo)
     mensajeSalonFamaId: { type: String, default: null },   // ID del mensaje editable del ranking
-    canalLogsId: { type: String, default: null },           // Logs detallados de toda actividad
+    canalLogsId: { type: String, default: null },           // Logs detallados de administración y seguridad
+    canalLogsPublicosId: { type: String, default: null },   // Logs públicos en tiempo real de justificación de huesos
     canalAnunciosId: { type: String, default: null },       // Anuncios admin/moderación
     canalJuegosId: { type: String, default: null },         // Canal exclusivo para juegos/apuestas
     canalMusicaId: { type: String, default: null },         // Canal dedicado para pedidos de música
     mensajeMusicaId: { type: String, default: null },       // ID del panel permanente de música
+    canalStickersId: { type: String, default: null },       // Canal bóveda para guardar stickers y emojis robados
+    canalCriptaId: { type: String, default: null },         // Canal dedicado para el centro interactivo de La Cripta
+    mensajeCriptaId: { type: String, default: null },       // ID del mensaje maestro fijo con ranking en vivo
+    canalAdminPanelId: { type: String, default: null },     // Canal dedicado para el panel permanente de administración
+    mensajeAdminPanelId: { type: String, default: null },   // ID del mensaje maestro fijo del panel de administración
+    // ── Permisos de Administración del Evento ──
+    rolesAdminIds: { type: [String], default: [] },        // Roles de Discord con acceso a comandos/panel admin
+    usuariosAdminIds: { type: [String], default: [] },     // Usuarios directos con acceso a comandos/panel admin
+    // ── Lista Negra del Evento (Blacklist) ──
+    blacklistRolesIds: { type: [String], default: [] },       // Roles excluidos del evento
+    blacklistUsuariosIds: { type: [String], default: [] },    // Usuarios excluidos del evento
     // ── Estado del Evento ──
     fechaCierre: { type: Date, required: true },
     estado: { type: String, enum: ['activo', 'finalizado'], default: 'activo' },

@@ -30,9 +30,7 @@ function construirEmbedSalonFama(config, topUsuarios, totalCazadores) {
         desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
         topUsuarios.forEach((u, i) => {
             const medalla = MEDALLAS[i] || `#${i + 1}`;
-            const pct = maxHuesos > 0 ? u.huesos / maxHuesos : 0;
-            const barra = BARRA_PROGRESO(pct, 8);
-            desc += `${medalla} <@${u.userId}>\n   ${barra} **${formatoNum(u.huesos)}** 🦴\n`;
+            desc += `${medalla} <@${u.userId}> — **${formatoNum(u.huesos)}** 🦴\n`;
         });
         desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
     }

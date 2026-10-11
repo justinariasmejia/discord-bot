@@ -22,6 +22,15 @@ function verificarCooldown(userId) {
 }
 
 function validarApuesta(usuario, monto) {
+    if (typeof monto === 'string') {
+        const str = monto.trim().toLowerCase();
+        if (str === 'todo' || str === 'all' || str === 'max') {
+            monto = Math.min(usuario.huesos, config.APUESTAS.MAXIMA_ABSOLUTA || 5000);
+        } else if (str === 'mitad' || str === 'half') {
+            monto = Math.floor(usuario.huesos / 2);
+        }
+    }
+
     monto = Math.trunc(Number(monto));
     if (!Number.isInteger(monto) || isNaN(monto) || monto <= 0) {
         return { valida: false, motivo: 'El monto ingresado debe ser un número entero positivo.' };
@@ -34,11 +43,6 @@ function validarApuesta(usuario, monto) {
         };
     }
 
-    const maxPermitido = Math.min(
-        Math.floor(usuario.huesos * config.APUESTAS.MAXIMO_PORCENTAJE),
-        config.APUESTAS.MAXIMA_ABSOLUTA
-    );
-
     if (usuario.huesos < monto) {
         return {
             valida: false,
@@ -46,10 +50,11 @@ function validarApuesta(usuario, monto) {
         };
     }
 
-    if (monto > maxPermitido) {
+    const maxAbsoluto = config.APUESTAS.MAXIMA_ABSOLUTA || 5000;
+    if (monto > maxAbsoluto) {
         return {
             valida: false,
-            motivo: `Tu apuesta máxima permitida es de **${maxPermitido}** huesos (50% de tu saldo o tope de 5,000).`,
+            motivo: `Tu apuesta excede el límite máximo permitido de **${maxAbsoluto}** huesos.`,
         };
     }
 
@@ -68,18 +73,20 @@ async function apostarCaraCruz(userId, guildId, monto, eleccion) {
     const cd = verificarCooldown(userId);
     if (cd.enCooldown) return { ok: false, motivo: 'cooldown', restanteMs: cd.restanteMs };
 
-    return conBloqueo(`${guildId}:${userId}`, async () => {
+    const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const usuario = await obtenerUsuario(userId, guildId);
         const val = validarApuesta(usuario, monto);
         if (!val.valida) return { ok: false, motivo: 'invalido', detalle: val.motivo };
 
+        monto = val.monto;
         const deducido = await modificarHuesos(userId, guildId, -monto, 'apuesta', 'Apuesta Cara o Cruz');
         if (!deducido) return { ok: false, motivo: 'saldo_insuficiente' };
 
         const prob = calcularProbabilidad(config.APUESTAS.CARA_CRUZ.PROB_VICTORIA_BASE);
 
         const gana = Math.random() < prob;
-        const resultadoLado = gana ? eleccion : (eleccion === 'cara' ? 'cruz' : 'cara');
+        const eleccionNormalizada = (eleccion || 'cara').toLowerCase().includes('cruz') ? 'cruz' : 'cara';
+        const resultadoLado = gana ? eleccionNormalizada : (eleccionNormalizada === 'cara' ? 'cruz' : 'cara');
 
         let saldoFinal = deducido.huesos;
         let premio = 0;
@@ -103,13 +110,16 @@ async function apostarCaraCruz(userId, guildId, monto, eleccion) {
             ok: true,
             juego: 'cara_cruz',
             gana,
-            eleccion,
+            eleccion: eleccionNormalizada,
             resultadoLado,
             monto,
             premio,
             saldoFinal,
         };
     });
+
+    if (bloqueo.ocupado) return { ok: false, motivo: 'ocupado', detalle: 'Se está procesando otra acción.' };
+    return bloqueo.resultado;
 }
 
 // ── 2. Dados Malditos ──
@@ -120,15 +130,14 @@ async function apostarDados(userId, guildId, monto, tipoTier, valorExtra) {
     const cd = verificarCooldown(userId);
     if (cd.enCooldown) return { ok: false, motivo: 'cooldown', restanteMs: cd.restanteMs };
 
-    return conBloqueo(`${guildId}:${userId}`, async () => {
+    const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const usuario = await obtenerUsuario(userId, guildId);
         const val = validarApuesta(usuario, monto);
         if (!val.valida) return { ok: false, motivo: 'invalido', detalle: val.motivo };
 
+        monto = val.monto;
         const deducido = await modificarHuesos(userId, guildId, -monto, 'apuesta', 'Apuesta Dados Malditos');
         if (!deducido) return { ok: false, motivo: 'saldo_insuficiente' };
-
-
 
         const dado1 = Math.floor(Math.random() * 6) + 1;
         const dado2 = Math.floor(Math.random() * 6) + 1;
@@ -193,6 +202,9 @@ async function apostarDados(userId, guildId, monto, tipoTier, valorExtra) {
             saldoFinal,
         };
     });
+
+    if (bloqueo.ocupado) return { ok: false, motivo: 'ocupado', detalle: 'Se está procesando otra acción.' };
+    return bloqueo.resultado;
 }
 
 // ── 3. Ruleta de la Calabaza ──
@@ -203,15 +215,14 @@ async function apostarRuleta(userId, guildId, monto, colorElegido) {
     const cd = verificarCooldown(userId);
     if (cd.enCooldown) return { ok: false, motivo: 'cooldown', restanteMs: cd.restanteMs };
 
-    return conBloqueo(`${guildId}:${userId}`, async () => {
+    const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const usuario = await obtenerUsuario(userId, guildId);
         const val = validarApuesta(usuario, monto);
         if (!val.valida) return { ok: false, motivo: 'invalido', detalle: val.motivo };
 
+        monto = val.monto;
         const deducido = await modificarHuesos(userId, guildId, -monto, 'apuesta', 'Apuesta Ruleta');
         if (!deducido) return { ok: false, motivo: 'saldo_insuficiente' };
-
-
 
         const numero = Math.floor(Math.random() * config.APUESTAS.RULETA.TOTAL_CASILLAS);
         let colorResultado = 'verde';
@@ -254,6 +265,9 @@ async function apostarRuleta(userId, guildId, monto, colorElegido) {
             saldoFinal,
         };
     });
+
+    if (bloqueo.ocupado) return { ok: false, motivo: 'ocupado', detalle: 'Se está procesando otra acción.' };
+    return bloqueo.resultado;
 }
 
 // ── 4. Tragamonedas de Halloween ──
@@ -276,15 +290,14 @@ async function apostarTragamonedas(userId, guildId, monto) {
     const cd = verificarCooldown(userId);
     if (cd.enCooldown) return { ok: false, motivo: 'cooldown', restanteMs: cd.restanteMs };
 
-    return conBloqueo(`${guildId}:${userId}`, async () => {
+    const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const usuario = await obtenerUsuario(userId, guildId);
         const val = validarApuesta(usuario, monto);
         if (!val.valida) return { ok: false, motivo: 'invalido', detalle: val.motivo };
 
+        monto = val.monto;
         const deducido = await modificarHuesos(userId, guildId, -monto, 'apuesta', 'Apuesta Tragamonedas');
         if (!deducido) return { ok: false, motivo: 'saldo_insuficiente' };
-
-
 
         const s1 = obtenerSimboloTragamonedas();
         const s2 = obtenerSimboloTragamonedas();
@@ -335,6 +348,9 @@ async function apostarTragamonedas(userId, guildId, monto) {
             saldoFinal,
         };
     });
+
+    if (bloqueo.ocupado) return { ok: false, motivo: 'ocupado', detalle: 'Se está procesando otra acción.' };
+    return bloqueo.resultado;
 }
 
 module.exports = {

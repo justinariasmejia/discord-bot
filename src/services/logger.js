@@ -1,196 +1,219 @@
 // src/services/logger.js
-// Sistema de logs en vivo: envía embeds detallados al canal de logs configurado.
+// Sistema de auditoría dual:
+// 1. Logs Públicos: Transparencia total en vivo que justifica de dónde gana y gasta huesos cada usuario.
+// 2. Logs de Administradores: Auditoría detallada de staff, seguridad, mantenimiento y balance.
 const { EmbedBuilder } = require('discord.js');
 const ConfigEvento = require('../models/ConfigEvento');
+const { formatoNum } = require('../utils/embeds');
+const { EMOJIS } = require('../utils/emojis');
 
 const COLORES_LOG = {
-    ganancia: 0x43a047,    // verde
-    perdida: 0xe53935,     // rojo
-    apuesta: 0xffa726,     // naranja
-    robo: 0x7b1fa2,        // morado
-    admin: 0x1565c0,       // azul
-    evento: 0x00897b,      // teal
-    duelo: 0xef6c00,       // naranja oscuro
-    tienda: 0x8e24aa,      // púrpura
-    sistema: 0x546e7a,     // gris
-};
-
-const ICONOS = {
-    cazar: '🏹',
-    diario: '🎁',
-    apuesta_ganada: '🎰✅',
-    apuesta_perdida: '🎰❌',
-    robo_exitoso: '🕵️✅',
-    robo_fallido: '🕵️❌',
-    robo_inmune: '🧿🛡️',
-    duelo_ganado: '⚔️✅',
-    duelo_perdido: '⚔️❌',
-    compra: '🛒',
-    uso_item: '🧪',
-    limosna: '🤲',
-    admin_dar: '🦴➕',
-    admin_quitar: '🦴➖',
-    admin_config: '⚙️',
-    evento_fantasma: '👻',
-    evento_trivia: '🎃',
-    evento_cofre: '🗝️',
-    evento_eclipse: '🌕',
-    maldicion: '👻💀',
-    bienvenida: '🆕',
-    multa_robo: '🚨',
-    compensacion_robo: '💰',
+    ganancia: 0x2e7d32,    // Verde esmeralda
+    perdida: 0xb00020,     // Rojo carmesí
+    apuesta: 0xff7518,     // Naranja de Halloween
+    duelo: 0xef6c00,       // Naranja intenso
+    admin: 0x1565c0,       // Azul
+    evento: 0x6a0dad,      // Morado oscuro
+    sorteo: 0xffd700,      // Dorado
+    sistema: 0x37474f,     // Gris pizarra
 };
 
 let _client = null;
-function setLogClient(client) { _client = client; }
+function setLogClient(client) {
+    _client = client;
+}
 
-async function enviarLog(guildId, { tipo, titulo, descripcion, userId, campos, thumbnail }) {
+// ── Enviar a Canal Público (Transparencia de la Comunidad) ──
+async function enviarLogPublico(guildId, { tipo, titulo, descripcion, userId, campos, thumbnail }) {
     if (!_client) return;
     try {
         const config = await ConfigEvento.findOne({ guildId }).lean();
-        if (!config || !config.canalLogsId) return;
+        const canalId = config?.canalLogsPublicosId || config?.canalLogsId;
+        if (!canalId) return;
 
-        const canal = _client.channels.cache.get(config.canalLogsId)
-            || await _client.channels.fetch(config.canalLogsId).catch(() => null);
+        const canal = _client.channels.cache.get(canalId) || await _client.channels.fetch(canalId).catch(() => null);
         if (!canal || !canal.isTextBased()) return;
 
         const color = COLORES_LOG[tipo] || COLORES_LOG.sistema;
-        const icono = ICONOS[tipo] || '📋';
-
         const embed = new EmbedBuilder()
             .setColor(color)
-            .setTitle(`${icono} ${titulo}`)
+            .setTitle(titulo)
             .setDescription(descripcion)
             .setTimestamp()
-            .setFooter({ text: '📋 Log del Sistema • La Cripta de los Huesos' });
+            .setFooter({ text: '📜 Registro Público • La Cripta de los Huesos' });
 
         if (userId) {
-            embed.setAuthor({ name: `Usuario: ${userId}` });
+            const user = _client.users.cache.get(userId);
+            if (user) embed.setAuthor({ name: user.tag, iconURL: user.displayAvatarURL({ dynamic: true }) });
         }
 
-        if (campos && campos.length > 0) {
-            embed.addFields(campos);
-        }
-
-        if (thumbnail) {
-            embed.setThumbnail(thumbnail);
-        }
+        if (campos && campos.length > 0) embed.addFields(campos);
+        if (thumbnail) embed.setThumbnail(thumbnail);
 
         await canal.send({ embeds: [embed] }).catch(() => null);
-    } catch (err) {
-        // Silenciar errores de logs para no afectar el flujo principal
-    }
+    } catch {}
 }
 
-// ── Funciones de log especializadas ──
+// ── Enviar a Canal de Administradores (Seguridad y Moderación) ──
+async function enviarLogAdmin(guildId, { titulo, descripcion, adminId, campos }) {
+    if (!_client) return;
+    try {
+        const config = await ConfigEvento.findOne({ guildId }).lean();
+        const canalId = config?.canalLogsId || config?.canalLogsPublicosId;
+        if (!canalId) return;
+
+        const canal = _client.channels.cache.get(canalId) || await _client.channels.fetch(canalId).catch(() => null);
+        if (!canal || !canal.isTextBased()) return;
+
+        const embed = new EmbedBuilder()
+            .setColor(COLORES_LOG.admin)
+            .setTitle(`🛡️ ${titulo}`)
+            .setDescription(descripcion)
+            .setTimestamp()
+            .setFooter({ text: '🔒 Auditoría Administrativa • Personal Autorizado' });
+
+        if (adminId) {
+            const admin = _client.users.cache.get(adminId);
+            if (admin) embed.setAuthor({ name: `Admin: ${admin.tag}`, iconURL: admin.displayAvatarURL({ dynamic: true }) });
+        }
+
+        if (campos && campos.length > 0) embed.addFields(campos);
+
+        await canal.send({ embeds: [embed] }).catch(() => null);
+    } catch {}
+}
+
+// ── 1. LOG PÚBLICO: CACERÍA DE HUESOS ──
 async function logCaza(guildId, userId, resultado) {
-    const campos = [];
-    if (resultado.premio) campos.push({ name: '💰 Ganancia', value: `+${resultado.premio} 🦴`, inline: true });
-    if (resultado.perdida) campos.push({ name: '💸 Pérdida', value: `-${resultado.perdida} 🦴`, inline: true });
-    if (resultado.usuario) campos.push({ name: '🦴 Saldo', value: `${resultado.usuario.huesos} 🦴`, inline: true });
-    campos.push({ name: '📦 Resultado', value: resultado.tipo || 'Desconocido', inline: true });
-
-    await enviarLog(guildId, {
-        tipo: resultado.premio > 0 ? 'ganancia' : (resultado.perdida > 0 ? 'perdida' : 'sistema'),
-        titulo: `Cacería — ${resultado.titulo || 'Exploración'}`,
-        descripcion: `<@${userId}> exploró el cementerio.`,
-        userId,
-        campos,
-    });
-}
-
-async function logApuesta(guildId, userId, resultado) {
-    const esGanancia = resultado.gana;
+    if (!resultado.ok && resultado.motivo === 'cooldown') return; // no spamear cooldowns
+    const esPremio = (resultado.premio || 0) > 0;
     const campos = [
-        { name: '🎲 Juego', value: resultado.juego || 'Desconocido', inline: true },
-        { name: '💰 Monto', value: `${resultado.monto} 🦴`, inline: true },
+        { name: '📦 Hallazgo', value: resultado.titulo || 'Exploración', inline: true },
+        { name: esPremio ? '💰 Ganancia' : '💸 Saldo', value: esPremio ? `+${formatoNum(resultado.premio)} 🦴` : '0 🦴', inline: true },
     ];
-    if (esGanancia) {
-        campos.push({ name: '🏆 Premio', value: `+${resultado.premio} 🦴`, inline: true });
+    if (resultado.usuario) {
+        campos.push({ name: '🦴 Saldo Actual', value: `${formatoNum(resultado.usuario.huesos)} 🦴`, inline: true });
     }
-    campos.push({ name: '🦴 Saldo', value: `${resultado.saldoFinal} 🦴`, inline: true });
 
-    await enviarLog(guildId, {
-        tipo: 'apuesta',
-        titulo: esGanancia ? 'Apuesta GANADA' : 'Apuesta PERDIDA',
-        descripcion: `<@${userId}> ${esGanancia ? 'ganó' : 'perdió'} en **${resultado.juego}**.`,
+    await enviarLogPublico(guildId, {
+        tipo: esPremio ? 'ganancia' : 'perdida',
+        titulo: `${EMOJIS.calaveraCeja || '🏹'} Cacería en la Cripta`,
+        descripcion: `<@${userId}> exploró las sombras del cementerio y ${esPremio ? `obtuvo botín.` : `no encontró nada nuevo.`}`,
         userId,
         campos,
     });
 }
 
-async function logRobo(guildId, ladronId, victimaId, resultado) {
-    const campos = [];
-    if (resultado.exito) {
-        campos.push({ name: '💰 Robado', value: `${resultado.monto} 🦴`, inline: true });
-    } else if (resultado.multa) {
-        campos.push({ name: '🚨 Multa', value: `${resultado.multa} 🦴`, inline: true });
-    }
-    campos.push({ name: '🎯 Víctima', value: `<@${victimaId}>`, inline: true });
+// ── 2. LOG PÚBLICO: RECOMPENSA DIARIA ──
+async function logDiario(guildId, userId, resultado) {
+    if (!resultado.ok) return;
+    const campos = [
+        { name: '🎁 Ofrenda Diaria', value: `+${formatoNum(resultado.premio)} 🦴`, inline: true },
+        { name: '🔥 Racha', value: `${resultado.racha} día(s)`, inline: true },
+        { name: '🦴 Saldo Actual', value: `${formatoNum(resultado.usuario?.huesos || 0)} 🦴`, inline: true },
+    ];
 
-    await enviarLog(guildId, {
-        tipo: 'robo',
-        titulo: resultado.exito ? 'Robo Exitoso' : 'Robo Fallido',
-        descripcion: resultado.exito
-            ? `<@${ladronId}> robó exitosamente a <@${victimaId}>.`
-            : `<@${ladronId}> fue atrapado intentando robar a <@${victimaId}>.`,
-        userId: ladronId,
+    await enviarLogPublico(guildId, {
+        tipo: 'ganancia',
+        titulo: `${EMOJIS.kittyHalloween || '🎁'} Bendición Diaria Reclamada`,
+        descripcion: `<@${userId}> recolectó su tributo diario de ultratumba.`,
+        userId,
         campos,
     });
 }
 
+// ── 3. LOG PÚBLICO: APUESTAS (Cara o Cruz, Tragamonedas, etc.) ──
+async function logApuesta(guildId, userId, resultado) {
+    if (!resultado.ok) return;
+    const gano = resultado.gana;
+    const nombreJuego = resultado.juego === 'cara_cruz' ? '🪙 Cara o Cruz' : (resultado.juego === 'tragamonedas' ? '🎰 Tragamonedas' : resultado.juego);
+
+    const campos = [
+        { name: '🎲 Juego', value: nombreJuego, inline: true },
+        { name: '💰 Monto Apostado', value: `${formatoNum(resultado.monto)} 🦴`, inline: true },
+        { name: gano ? '🎉 Ganancia' : '🩸 Pérdida', value: gano ? `+${formatoNum(resultado.premio)} 🦴` : `-${formatoNum(resultado.monto)} 🦴`, inline: true },
+        { name: '🦴 Saldo Restante', value: `${formatoNum(resultado.saldoFinal)} 🦴`, inline: true },
+    ];
+
+    if (resultado.juego === 'cara_cruz') {
+        campos.push({ name: '🎯 Predicción / Cayó', value: `${(resultado.eleccion || '').toUpperCase()} ➡️ **${(resultado.resultado || resultado.resultadoLado || '').toUpperCase()}**`, inline: true });
+    }
+
+    await enviarLogPublico(guildId, {
+        tipo: gano ? 'ganancia' : 'perdida',
+        titulo: gano ? `🎰 ¡Apuesta Ganada! (${nombreJuego})` : `💀 Apuesta Perdida (${nombreJuego})`,
+        descripcion: `<@${userId}> ${gano ? 'acertó su apuesta y multiplicó sus huesos' : 'perdió sus huesos ante las ánimas'}.`,
+        userId,
+        campos,
+    });
+}
+
+// ── 4. LOG PÚBLICO: DUELOS PVP ──
 async function logDuelo(guildId, ganadorId, perdedorId, premio) {
-    await enviarLog(guildId, {
+    const campos = [
+        { name: '🏆 Vencedor', value: `<@${ganadorId}>`, inline: true },
+        { name: '💀 Caído', value: `<@${perdedorId}>`, inline: true },
+        { name: '💰 Botín Cobrado', value: `+${formatoNum(premio)} 🦴`, inline: true },
+    ];
+
+    await enviarLogPublico(guildId, {
         tipo: 'duelo',
-        titulo: 'Duelo Concluido',
-        descripcion: `<@${ganadorId}> venció a <@${perdedorId}> en duelo.`,
-        campos: [
-            { name: '🏆 Ganador', value: `<@${ganadorId}>`, inline: true },
-            { name: '💀 Perdedor', value: `<@${perdedorId}>`, inline: true },
-            { name: '💰 Premio', value: `${premio} 🦴`, inline: true },
-        ],
-    });
-}
-
-async function logCompra(guildId, userId, itemNombre, precio, saldo) {
-    await enviarLog(guildId, {
-        tipo: 'tienda',
-        titulo: 'Compra en el Bazar',
-        descripcion: `<@${userId}> compró **${itemNombre}**.`,
-        userId,
-        campos: [
-            { name: '🏷️ Precio', value: `${precio} 🦴`, inline: true },
-            { name: '🦴 Saldo', value: `${saldo} 🦴`, inline: true },
-        ],
-    });
-}
-
-async function logAdmin(guildId, adminId, accion, descripcion, campos) {
-    await enviarLog(guildId, {
-        tipo: 'admin',
-        titulo: `Admin: ${accion}`,
-        descripcion: `<@${adminId}> ejecutó: **${accion}**\n${descripcion}`,
-        userId: adminId,
+        titulo: '⚔️ Duelo PvP Resuelto',
+        descripcion: `¡<@${ganadorId}> derrotó a <@${perdedorId}> en un duelo de reflejos y se llevó el pozo!`,
         campos,
     });
 }
 
-async function logEvento(guildId, tipoEvento, descripcion) {
-    await enviarLog(guildId, {
+// ── 5. LOG PÚBLICO: EVENTOS COMUNITARIOS (Fantasma, Trivia, Huesos) ──
+async function logEvento(guildId, tipoEvento, descripcion, userId = null, premio = null) {
+    const campos = [];
+    if (premio) campos.push({ name: '💰 Recompensa', value: `+${formatoNum(premio)} 🦴`, inline: true });
+
+    await enviarLogPublico(guildId, {
         tipo: 'evento',
-        titulo: `Evento: ${tipoEvento}`,
-        descripcion,
+        titulo: `🎃 Evento Comunitario: ${tipoEvento}`,
+        descripcion: userId ? `<@${userId}> participó en el evento: ${descripcion}` : descripcion,
+        userId,
+        campos,
+    });
+}
+
+// ── 6. LOG PÚBLICO: SORTEO / DROP ALEATORIO ──
+async function logSorteo(guildId, ganadorId, premio, creadorId) {
+    const campos = [
+        { name: '🎁 Ganador', value: `<@${ganadorId}>`, inline: true },
+        { name: '💰 Premio', value: `+${formatoNum(premio)} 🦴`, inline: true },
+        { name: '👑 Iniciado por', value: `<@${creadorId}>`, inline: true },
+    ];
+
+    await enviarLogPublico(guildId, {
+        tipo: 'sorteo',
+        titulo: '🎉 Sorteo Relámpago Concluido',
+        descripcion: `¡<@${ganadorId}> ha ganado el drop comunitario de huesos!`,
+        userId: ganadorId,
+        campos,
+    });
+}
+
+// ── 7. LOG DE AUDITORÍA: ADMINISTRADORES ──
+async function logAdmin(guildId, adminId, accion, descripcion, campos = []) {
+    await enviarLogAdmin(guildId, {
+        titulo: accion,
+        descripcion: `**Acción:** ${accion}\n${descripcion}`,
+        adminId,
+        campos,
     });
 }
 
 module.exports = {
     setLogClient,
-    enviarLog,
+    enviarLogPublico,
+    enviarLogAdmin,
     logCaza,
+    logDiario,
     logApuesta,
-    logRobo,
     logDuelo,
-    logCompra,
-    logAdmin,
     logEvento,
+    logSorteo,
+    logAdmin,
 };
