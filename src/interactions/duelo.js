@@ -68,7 +68,16 @@ module.exports = {
                 COLORES.naranja
             );
 
-            const msgPublico = await interaction.channel.send({
+            // Determinar canal de destino adecuado (no ensuciar canales fijos de solo lectura)
+            const { obtenerConfig } = require('../services/evento');
+            const conf = await obtenerConfig(interaction.guildId);
+            let targetCanal = interaction.channel;
+            const canalDestinoId = conf?.canalJuegosId || conf?.canalEventosId;
+            if (canalDestinoId && (interaction.channelId === conf?.canalCriptaId || interaction.channelId === conf?.canalLogsPublicosId)) {
+                targetCanal = interaction.client.channels.cache.get(canalDestinoId) || await interaction.client.channels.fetch(canalDestinoId).catch(() => null) || interaction.channel;
+            }
+
+            const msgPublico = await targetCanal.send({
                 content: `🔔 ¡Atención <@${rivalId}>! Tienes un reto de duelo pendiente.`,
                 embeds: [embedInvitacion],
                 components: [filaInvitacionDuelo(duelo._id.toString())],
@@ -93,7 +102,7 @@ module.exports = {
             }, config.DUELOS.TIMEOUT_ACEPTAR_MS);
 
             return interaction.reply({
-                content: `✅ ¡Desafío enviado a <@${rivalId}>! Que la suerte esté de tu lado.`,
+                content: `✅ ¡Desafío enviado a <@${rivalId}> en <#${targetCanal.id}>! Que la suerte esté de tu lado.`,
                 flags: MessageFlags.Ephemeral,
             });
         }

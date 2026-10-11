@@ -12,7 +12,7 @@ async function responderError(interaction, texto) {
     }
 }
 
-const COMANDOS_EVENTO = ['cripta', 'duelo', 'ayuda'];
+const COMANDOS_EVENTO = ['cripta', 'duelo', 'duelos', 'ayuda'];
 const PREFIJOS_EVENTO = ['cripta', 'duelo', 'evento', 'apuesta', 'ruleta_grupal'];
 const { obtenerConfig, puedeInteractuarEvento, esSuperAdmin } = require('../services/evento');
 
