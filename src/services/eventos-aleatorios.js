@@ -339,8 +339,10 @@ function iniciarServicioEventosAleatorios(client) {
         try {
             for (const guild of client.guilds.cache.values()) {
                 const config = await ConfigEvento.findOne({ guildId: guild.id });
-                const canalId = config ? obtenerCanalApariciones(config) : null;
-                if (!config || !eventoActivo(config) || !canalId) continue;
+                // En mantenimiento/modoTest no se lanzan eventos aleatorios automáticos
+                if (!config || !eventoActivo(config) || config.modoTest) continue;
+                const canalId = obtenerCanalApariciones(config);
+                if (!canalId) continue;
 
                 // 65% de probabilidad de que ocurra un evento en este ciclo
                 if (Math.random() < 0.65) {

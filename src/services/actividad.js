@@ -26,7 +26,8 @@ async function procesarActividadTexto(message, client) {
         const ahora = Date.now();
 
         const conf = await obtenerConfig(guildId);
-        if (!eventoActivo(conf)) return;
+        // Si el evento está inactivo o en mantenimiento/modoTest, nadie gana huesos por chat
+        if (!eventoActivo(conf) || conf.modoTest) return;
 
         // 1. Filtrar canal: Si hay canales específicos configurados, solo premiar en esos canales
         if (conf.canalesRecompensaChatIds && conf.canalesRecompensaChatIds.length > 0) {
@@ -100,7 +101,8 @@ function iniciarServicioVoz(client) {
         try {
             for (const guild of client.guilds.cache.values()) {
                 const conf = await obtenerConfig(guild.id);
-                if (!eventoActivo(conf)) continue;
+                // Si el evento está inactivo o en mantenimiento/modoTest, nadie gana huesos por voz
+                if (!eventoActivo(conf) || conf.modoTest) continue;
 
                 const mult = multiplicadorActual(conf);
                 const canalesVoz = guild.channels.cache.filter((c) => c.isVoiceBased());

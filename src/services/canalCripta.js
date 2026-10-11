@@ -57,20 +57,25 @@ async function construirPanelCripta(guildId) {
 
     // Estado del Evento
     desc += '### ⚙️ Información de Temporada\n';
-    if (activo) {
+    if (!activo) {
+        desc += '🔴 **La Cripta ha cerrado sus puertas por esta temporada.**\n';
+    } else if (config.modoTest) {
+        desc += '🛠️ **Estado:** Mantenimiento / Pausado (Apertura Próximamente)\n';
+        desc += '⏳ *El evento aún no ha iniciado oficialmente. Todos los cazadores comienzan con 100 huesos.* 🦴\n';
+    } else {
         desc += `🟢 **Estado:** Temporada Activa\n`;
         desc += `⏳ **Cierre:** ${tiempoRelativo(config.fechaCierre.getTime())}\n`;
         if (multiplicador > 1) {
             desc += `⚡ **Bonus Activo:** ¡Ganancias multiplicadas **x${multiplicador}**!\n`;
         }
-    } else {
-        desc += '🔴 **La Cripta ha cerrado sus puertas por esta temporada.**\n';
     }
     desc += `👥 **Total de cazadores:** \`${formatoNum(totalCazadores)}\`\n\n`;
     desc += '👇 *Interactúa con los botones de abajo para jugar, cazar huesos o ver tu perfil sin escribir comandos:*';
 
     const embed = basePremium(`${EMOJIS.calabaza || '🎃'} La Cripta de los Huesos • Centro de Mando`, desc, COLORES.naranja);
     embed.setFooter({ text: '⚡ Ranking en tiempo real • 🎃 La Cripta de los Huesos' });
+
+    const interactuable = activo && !config.modoTest;
 
     // Fila 1: Acciones Principales
     const fila1 = new ActionRowBuilder().addComponents(
@@ -79,25 +84,25 @@ async function construirPanelCripta(guildId) {
             .setLabel('Cazar')
             .setEmoji('🏹')
             .setStyle(ButtonStyle.Primary)
-            .setDisabled(!activo),
+            .setDisabled(!interactuable),
         new ButtonBuilder()
             .setCustomId('cripta:hub_diario:todos')
             .setLabel('Reclamar Diario')
             .setEmoji('🎁')
             .setStyle(ButtonStyle.Success)
-            .setDisabled(!activo),
+            .setDisabled(!interactuable),
         new ButtonBuilder()
             .setCustomId('cripta:hub_apostar:todos')
             .setLabel('Apostar')
             .setEmoji('🎰')
             .setStyle(ButtonStyle.Danger)
-            .setDisabled(!activo),
+            .setDisabled(!interactuable),
         new ButtonBuilder()
             .setCustomId('cripta:hub_duelo:todos')
             .setLabel('Duelo PvP')
             .setEmoji('⚔️')
             .setStyle(ButtonStyle.Secondary)
-            .setDisabled(!activo)
+            .setDisabled(!interactuable)
     );
 
     // Fila 2: Perfil y Utilidades

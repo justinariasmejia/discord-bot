@@ -109,9 +109,9 @@ async function construirPanelAdmin(guildId) {
             .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
             .setCustomId('admin:panel_toggle_mantenimiento:admin')
-            .setLabel(config.modoTest ? 'Desactivar Mantenimiento' : 'Activar Mantenimiento')
-            .setEmoji('🛠️')
-            .setStyle(config.modoTest ? ButtonStyle.Danger : ButtonStyle.Secondary),
+            .setLabel(config.modoTest ? 'Iniciar Evento General' : 'Pausar / Mantenimiento')
+            .setEmoji(config.modoTest ? '🚀' : '🛠️')
+            .setStyle(config.modoTest ? ButtonStyle.Success : ButtonStyle.Secondary),
         new ButtonBuilder()
             .setCustomId('admin:panel_menu_canales:admin')
             .setLabel('Configurar Canales')

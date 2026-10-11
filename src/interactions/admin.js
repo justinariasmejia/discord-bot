@@ -137,7 +137,7 @@ module.exports = {
             // 1. Respaldo de seguridad previo
             const resBackup = await crearBackup(guildId, 'pre_reset_temporada');
 
-            // 2. Reseteo de usuarios
+            // 2. Reseteo completo de usuarios a 100 huesos exactos y estadísticas en 0
             const totalCazadores = await Usuario.countDocuments({ guildId });
             await Usuario.updateMany(
                 { guildId },
@@ -146,21 +146,39 @@ module.exports = {
                         huesos: 100,
                         rachaDiaria: 0,
                         ultimoDiario: null,
-                        ultimaCaza: null,
-                        caceriasExitosas: 0,
-                        caceriasTotales: 0,
-                        duelosGanados: 0,
-                        duelosPerdidos: 0,
+                        ultimoCazar: null,
+                        ultimaLimosna: null,
                         inventario: [],
+                        efectos: [],
+                        estadisticas: {
+                            diarios: 0,
+                            cazados: 0,
+                            apostado: 0,
+                            ganado: 0,
+                            perdido: 0,
+                            duelosGanados: 0,
+                            duelosPerdidos: 0,
+                            robosExitosos: 0,
+                            robosFallidos: 0,
+                            vecesRobado: 0,
+                        },
                     },
                 }
             );
 
-            // 3. Limpiar transacciones
+            // 3. Limpiar transacciones antiguas
             await Transaccion.deleteMany({ guildId });
 
-            // 4. Actualizar paneles en vivo
-            actualizarPanelCripta(client, guildId);
+            // 4. Congelar el evento automáticamente en Pausado/Mantenimiento para que nadie gane huesos hasta que el admin lo active
+            await ConfigEvento.findOneAndUpdate(
+                { guildId },
+                { $set: { modoTest: true } },
+                { upsert: true }
+            );
+
+            // 5. Actualizar paneles en vivo
+            const { actualizarPanelCripta } = require('../services/canalCripta');
+            await actualizarPanelCripta(client, guildId);
             actualizarPanelAdminPermanente(client, guildId);
 
             await logAdmin(guildId, interaction.user.id, 'Reseteo Total de Evento', `Temporada reiniciada para ${totalCazadores} cazadores. Respaldo previo: \`${resBackup.nombreArchivo}\`.`);
@@ -191,8 +209,12 @@ module.exports = {
             config.modoTest = !config.modoTest;
             await config.save();
 
-            await logAdmin(guildId, interaction.user.id, 'Modo Test / Mantenimiento', `${config.modoTest ? '🟢 ACTIVADO' : '🔴 DESACTIVADO'}`);
+            await logAdmin(guildId, interaction.user.id, 'Modo Test / Mantenimiento', `${config.modoTest ? '🛠️ ACTIVADO (Pausado)' : '🟢 DESACTIVADO (En vivo)'}`);
             solicitarActualizacionAdminPanel(guildId);
+            // Sincronizar también el panel de La Cripta para que habilite/deshabilite botones en vivo
+            const { actualizarPanelCripta } = require('../services/canalCripta');
+            actualizarPanelCripta(interaction.client, guildId);
+
             const panel = await construirPanelAdmin(guildId);
             return interaction.editReply(panel).catch(() => null);
         }
