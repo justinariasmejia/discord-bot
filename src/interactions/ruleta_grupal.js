@@ -1,12 +1,7 @@
-﻿// src/interactions/ruleta_grupal.js
+// src/interactions/ruleta_grupal.js
 // Manejador de interacciones para la Ruleta Grupal pública.
-const {
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle,
-    ActionRowBuilder,
-    MessageFlags,
-} = require('discord.js');
+// Unirse es en 1 solo clic con ticket de precio fijo y actualización inmediata del pozo.
+const { MessageFlags } = require('discord.js');
 const { unirseRondaGrupal } = require('../services/ruletaGrupal');
 const { formatoNum } = require('../utils/embeds');
 
@@ -17,32 +12,11 @@ module.exports = {
         const accion = partes[1];
         const extra = partes[3];
 
-        // ── Botón Unirme / Apostar ──
+        // ── Botón Unirme (1 solo clic con precio fijo) ──
         if (accion === 'unirse') {
             const rondaId = extra;
 
-            const modal = new ModalBuilder()
-                .setCustomId(`ruleta_grupal:modal_apostar:${interaction.user.id}:${rondaId}`)
-                .setTitle('🎡 Apostar en Ruleta Grupal');
-
-            const inputMonto = new TextInputBuilder()
-                .setCustomId('monto')
-                .setLabel('¿Cuántos huesos deseas apostar?')
-                .setPlaceholder('Ej: 20 (mínimo 10)')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-                .setMaxLength(6);
-
-            modal.addComponents(new ActionRowBuilder().addComponents(inputMonto));
-            return interaction.showModal(modal);
-        }
-
-        // ── Envío del modal de apuesta ──
-        if (accion === 'modal_apostar') {
-            const rondaId = extra;
-            const montoStr = interaction.fields.getTextInputValue('monto');
-
-            const res = await unirseRondaGrupal(rondaId, interaction.user.id, interaction.guildId, montoStr);
+            const res = await unirseRondaGrupal(rondaId, interaction.user.id, interaction.guildId, interaction.channel);
 
             if (!res.ok) {
                 if (res.motivo === 'ronda_inactiva') {
@@ -51,21 +25,15 @@ module.exports = {
                         flags: MessageFlags.Ephemeral,
                     });
                 }
-                if (res.motivo === 'monto_invalido') {
+                if (res.motivo === 'ya_participa') {
                     return interaction.reply({
-                        content: `❌ Monto inválido. La apuesta mínima es de **${res.min}** huesos.`,
+                        content: `⚠️ Ya estás registrado en esta ruleta con tu ticket de **${formatoNum(res.precio)}** huesos. Todos los cazadores tienen exactamente 1 ticket para igualdad de condiciones.`,
                         flags: MessageFlags.Ephemeral,
                     });
                 }
                 if (res.motivo === 'saldo_insuficiente') {
                     return interaction.reply({
-                        content: `❌ No tienes suficientes huesos. Saldo actual: **${formatoNum(res.saldo)}** huesos.`,
-                        flags: MessageFlags.Ephemeral,
-                    });
-                }
-                if (res.motivo === 'ya_subio') {
-                    return interaction.reply({
-                        content: '❌ Ya has incrementado tu apuesta una vez en esta ronda (máximo 1 incremento).',
+                        content: `❌ No tienes suficientes huesos para comprar este ticket. Necesitas **${formatoNum(res.precio)}** huesos (Saldo actual: **${formatoNum(res.saldo)}** 🦴).`,
                         flags: MessageFlags.Ephemeral,
                     });
                 }
@@ -76,7 +44,9 @@ module.exports = {
             }
 
             return interaction.reply({
-                content: `✅ ¡Apuesta de **${formatoNum(res.monto)}** huesos registrada en la Ruleta Grupal!\nTu saldo actual es de **${formatoNum(res.nuevoSaldo)}** huesos.`,
+                content: `✅ ¡Ticket adquirido por **${formatoNum(res.precio)}** huesos!\n` +
+                    `💰 El pozo acumulado subió a **${formatoNum(res.nuevoPozo)}** huesos con **${res.totalParticipantes}** participantes.\n` +
+                    `🦴 Tu saldo actual es de **${formatoNum(res.nuevoSaldo)}** huesos. ¡Mucha suerte!`,
                 flags: MessageFlags.Ephemeral,
             });
         }

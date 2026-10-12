@@ -225,6 +225,92 @@ module.exports = {
             return interaction.editReply(panel).catch(() => null);
         }
 
+        // ── 4.1. BONE PARTY (Regalar Huesos a Todos los Cazadores en General) ──
+        if (accion === 'panel_party') {
+            const modal = new ModalBuilder()
+                .setCustomId(`admin:modal_party:${interaction.user.id}`)
+                .setTitle('🎉 Repartir Huesos a Todos (Party)');
+
+            const inputCantidad = new TextInputBuilder()
+                .setCustomId('cantidad')
+                .setLabel('¿Cuántos huesos darás a cada uno?')
+                .setPlaceholder('Ej: 100')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true);
+
+            const inputMotivo = new TextInputBuilder()
+                .setCustomId('motivo')
+                .setLabel('Motivo de la fiesta / celebración')
+                .setPlaceholder('Ej: ¡Celebración de apertura de la Cripta!')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false);
+
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(inputCantidad),
+                new ActionRowBuilder().addComponents(inputMotivo)
+            );
+            return interaction.showModal(modal);
+        }
+
+        if (accion === 'modal_party') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const cantidad = parseInt(interaction.fields.getTextInputValue('cantidad'), 10);
+            const motivo = interaction.fields.getTextInputValue('motivo') || '🎉 ¡Bone Party Comunitaria!';
+
+            if (isNaN(cantidad) || cantidad <= 0) {
+                return interaction.editReply({ content: '❌ Cantidad inválida. Debe ser un número mayor a 0.' });
+            }
+
+            // Otorgar a todos los cazadores registrados en la guild
+            const res = await Usuario.updateMany(
+                { guildId },
+                { $inc: { huesos: cantidad } }
+            );
+
+            await logAdmin(guildId, interaction.user.id, '🎉 BONE PARTY', `+${formatoNum(cantidad)} huesos a cada uno (${res.modifiedCount} cazadores) — ${motivo}`);
+
+            // Anuncio en logs públicos
+            const { enviarLogPublico } = require('../services/logger');
+            await enviarLogPublico(guildId, {
+                tipo: 'sorteo',
+                titulo: '🎉 ¡BONE PARTY ACTIVADA! 🦴',
+                descripcion: `¡El Administrador <@${interaction.user.id}> ha bendecido a todos los cazadores con una **Bone Party**!\n\n` +
+                    `🎁 **Regalo para cada cazador:** **+${formatoNum(cantidad)}** huesos 🦴\n` +
+                    `👥 **Cazadores beneficiados:** **${res.modifiedCount}** cazadores\n` +
+                    `📣 **Motivo:** *${motivo}*\n\n` +
+                    `¡Tus huesos ya están acreditados en tu saldo!`,
+                userId: interaction.user.id,
+                campos: [
+                    { name: '💰 Bono por Cazador', value: `+${formatoNum(cantidad)} 🦴`, inline: true },
+                    { name: '👥 Total Cazadores', value: `${res.modifiedCount}`, inline: true },
+                ],
+            }).catch(() => {});
+
+            // Notificar en canal de anuncios si está configurado
+            const conf = await ConfigEvento.findOne({ guildId }).lean();
+            if (conf?.canalAnunciosId) {
+                const canalAnuncios = client.channels.cache.get(conf.canalAnunciosId) || await client.channels.fetch(conf.canalAnunciosId).catch(() => null);
+                if (canalAnuncios && canalAnuncios.isTextBased()) {
+                    const embedAnuncio = basePremium(
+                        '🎉 ¡BONE PARTY EN LA CRIPTA! 🦴',
+                        `¡El Administrador <@${interaction.user.id}> ha repartido una **Bone Party** para toda la comunidad!\n\n` +
+                        `🎁 **Premio para cada cazador:** **+${formatoNum(cantidad)}** huesos 🦴\n` +
+                        `📣 **Mensaje:** *${motivo}*\n\n` +
+                        `¡Revisa tu saldo en la Cripta y que comience la diversión!`,
+                        COLORES.dorado
+                    );
+                    canalAnuncios.send({ embeds: [embedAnuncio] }).catch(() => {});
+                }
+            }
+
+            solicitarActualizacionCripta(guildId);
+            solicitarActualizacionAdminPanel(guildId);
+
+            return interaction.editReply({
+                embeds: [basePremium('🎉 ¡Bone Party Exitosa!', `Se han repartido **+${formatoNum(cantidad)}** huesos a cada uno de los **${res.modifiedCount}** cazadores registrados.\n\nMotivo: *${motivo}*`, COLORES.verde)],
+            });
+        }
+
         // ── 5. Dar Huesos: Paso 1 (Seleccionar Usuario) ──
         if (accion === 'panel_dar_huesos') {
             const fila = new ActionRowBuilder().addComponents(

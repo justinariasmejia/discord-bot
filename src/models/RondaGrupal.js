@@ -13,6 +13,8 @@ const rondaGrupalSchema = new Schema(
             index: true,
         },
         pozo: { type: Number, default: 0 },
+        precioEntrada: { type: Number, default: 50 },
+        creadorId: { type: String, default: null },
         participantes: [
             {
                 _id: false,

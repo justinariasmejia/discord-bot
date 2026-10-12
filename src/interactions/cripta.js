@@ -14,7 +14,7 @@ const { posicionRanking } = require('../services/economia');
 const { reclamarDiario } = require('../services/diario');
 const { cazar } = require('../services/cazar');
 const { obtenerRanking } = require('../services/ranking');
-const { iniciarRondaGrupal } = require('../services/ruletaGrupal');
+const { iniciarRondaGrupal, consultarCooldownRuleta } = require('../services/ruletaGrupal');
 const configBalance = require('../data/config');
 const { logCaza, logDiario } = require('../services/logger');
 const { base, COLORES } = require('../utils/embeds');
@@ -99,44 +99,38 @@ module.exports = {
             const juego = accion === 'sel_juego_btn' ? extra : interaction.values[0];
 
             if (juego === 'ruleta_grupal') {
-                await interaction.deferUpdate();
-                const res = await iniciarRondaGrupal(interaction.channel, interaction.guildId, interaction.user);
-                if (!res.ok) {
-                    if (res.motivo === 'ya_activa') {
+                const cd = consultarCooldownRuleta(interaction.channelId);
+                if (cd.bloqueado) {
+                    if (cd.motivo === 'ya_activa') {
                         const embedError = base('⏳ Ronda en Curso', 'Ya hay una ruleta comunitaria en marcha en este canal.\n\n¡Participa en el mensaje público de la ruleta!', COLORES.morado);
-                        return interaction.editReply({ embeds: [embedError], components: [filaVolver(duenoId)] });
+                        return interaction.reply({ embeds: [embedError], flags: MessageFlags.Ephemeral });
                     }
-                    if (res.motivo === 'mostrando_resultado') {
-                        const segs = Math.ceil((res.restanteMs || 1000) / 1000);
-                        const embedError = base(
-                            '🏆 Resultados en Pantalla',
-                            `La ronda comunitaria anterior acaba de concluir y está mostrando al ganador en el canal.\n\nPodrás iniciar otra ronda en **${segs}s**.`,
-                            COLORES.morado
-                        );
-                        return interaction.editReply({ embeds: [embedError], components: [filaVolver(duenoId)] });
+                    if (cd.motivo === 'mostrando_resultado') {
+                        const segs = Math.ceil((cd.restanteMs || 1000) / 1000);
+                        const embedError = base('🏆 Resultados en Pantalla', `La ronda comunitaria anterior acaba de concluir y está mostrando al ganador en el canal.\n\nPodrás iniciar otra ronda en **${segs}s**.`, COLORES.morado);
+                        return interaction.reply({ embeds: [embedError], flags: MessageFlags.Ephemeral });
                     }
-                    if (res.motivo === 'en_cooldown') {
-                        const segs = Math.ceil((res.restanteMs || 1000) / 1000);
-                        const embedError = base(
-                            '⏳ Ruleta en Enfriamiento',
-                            `La ruleta comunitaria está recargando su energía de ultratumba.\n\nPodrás iniciar una nueva ronda en **${segs}s**.`,
-                            COLORES.morado
-                        );
-                        return interaction.editReply({ embeds: [embedError], components: [filaVolver(duenoId)] });
-                    }
-                    if (res.motivo === 'evento_cerrado') {
-                        const embedError = base('🕯️ Evento Cerrado', 'La Cripta ya ha cerrado sus puertas por mantenimiento o fin de temporada.', COLORES.negro);
-                        return interaction.editReply({ embeds: [embedError], components: [filaVolver(duenoId)] });
+                    if (cd.motivo === 'en_cooldown') {
+                        const segs = Math.ceil((cd.restanteMs || 1000) / 1000);
+                        const embedError = base('⏳ Ruleta en Enfriamiento', `La ruleta comunitaria está recargando su energía de ultratumba.\n\nPodrás iniciar una nueva ronda en **${segs}s**.`, COLORES.morado);
+                        return interaction.reply({ embeds: [embedError], flags: MessageFlags.Ephemeral });
                     }
                 }
-                const embedIniciada = base(
-                    '👥 ¡Ruleta Grupal Iniciada!',
-                    'Se ha iniciado una ronda comunitaria de **1 minuto (60s)** en este canal.\n\n' +
-                    'Presiona el botón **[Unirme / Apostar 🦴]** en el mensaje público del canal para colocar tus huesos.\n' +
-                    'Los resultados permanecerán visibles durante **1 minuto** al concluir.',
-                    COLORES.verde
-                );
-                return interaction.editReply({ embeds: [embedIniciada], components: [filaVolver(duenoId)] });
+
+                const modal = new ModalBuilder()
+                    .setCustomId(`cripta:modal_crear_ruleta:${duenoId}`)
+                    .setTitle('🎡 Iniciar Ruleta Grupal (Ticket Fijo)');
+
+                const inputPrecio = new TextInputBuilder()
+                    .setCustomId('precio_entrada')
+                    .setLabel('¿Precio de entrada por cazador?')
+                    .setPlaceholder('Ej: 50 (mínimo 10, máximo 5000)')
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true)
+                    .setMaxLength(5);
+
+                modal.addComponents(new ActionRowBuilder().addComponents(inputPrecio));
+                return interaction.showModal(modal);
             }
 
             if (juego === 'cara_cruz') {
@@ -267,6 +261,59 @@ module.exports = {
 
             modal.addComponents(new ActionRowBuilder().addComponents(inputMonto));
             return interaction.showModal(modal);
+        }
+
+        // ── 5.1. Modal de Creación de Ruleta Grupal con Precio Fijo ──
+        if (accion === 'modal_crear_ruleta') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const precio = parseInt(interaction.fields.getTextInputValue('precio_entrada'), 10);
+
+            if (isNaN(precio) || precio < configBalance.APUESTAS.MINIMA) {
+                return interaction.editReply({
+                    content: `❌ El precio mínimo de entrada es de **${configBalance.APUESTAS.MINIMA}** huesos.`,
+                });
+            }
+            if (precio > (configBalance.APUESTAS.MAXIMA_ABSOLUTA || 5000)) {
+                return interaction.editReply({
+                    content: `❌ El precio máximo permitido es de **${formatoNum(configBalance.APUESTAS.MAXIMA_ABSOLUTA || 5000)}** huesos.`,
+                });
+            }
+
+            const usuario = await obtenerUsuario(duenoId, interaction.guildId);
+            if (usuario.huesos < precio) {
+                return interaction.editReply({
+                    content: `❌ No tienes suficientes huesos para comprar tu propio ticket y abrir la ruleta. Necesitas **${formatoNum(precio)}** huesos (Saldo actual: **${formatoNum(usuario.huesos)}** 🦴).`,
+                });
+            }
+
+            const res = await iniciarRondaGrupal(interaction.channel, interaction.guildId, interaction.user, precio);
+            if (!res.ok) {
+                if (res.motivo === 'ya_activa') {
+                    return interaction.editReply({ content: '⏳ Ya hay una ruleta grupal activa en este canal.' });
+                }
+                if (res.motivo === 'mostrando_resultado') {
+                    const segs = Math.ceil((res.restanteMs || 1000) / 1000);
+                    return interaction.editReply({ content: `🏆 La ronda anterior está mostrando resultados. Espera **${segs}s**.` });
+                }
+                if (res.motivo === 'en_cooldown') {
+                    const segs = Math.ceil((res.restanteMs || 1000) / 1000);
+                    return interaction.editReply({ content: `⏳ Ruleta en cooldown. Podrás iniciar otra en **${segs}s**.` });
+                }
+                if (res.motivo === 'evento_cerrado') {
+                    return interaction.editReply({ content: '🕯️ La Cripta está en pausa o mantenimiento.' });
+                }
+                return interaction.editReply({ content: '❌ No se pudo iniciar la ruleta grupal en este momento.' });
+            }
+
+            const embedIniciada = base(
+                '👥 ¡Ruleta Grupal Iniciada!',
+                `Se ha abierto una ronda comunitaria de **1 minuto (60s)** con entrada fija de **${formatoNum(precio)}** huesos.\n\n` +
+                `✅ **Tu ticket ya fue registrado automáticamente en el pozo.**\n` +
+                `Los demás cazadores pueden sumarse con el botón **[🎟️ Unirme (${formatoNum(precio)} 🦴)]** en el mensaje público del canal.\n\n` +
+                `⏱️ Al terminar el minuto, el resultado y ganador permanecerán visibles durante **1 minuto**.`,
+                COLORES.verde
+            );
+            return interaction.editReply({ embeds: [embedIniciada] });
         }
 
         // 👤 Perfil del cazador desde el panel maestro

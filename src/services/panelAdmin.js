@@ -81,7 +81,7 @@ async function construirPanelAdmin(guildId) {
     const embed = basePremium('🛡️ Panel de Control Administrativo • La Cripta', desc, COLORES.morado);
     embed.setFooter({ text: '⚙️ Panel Maestro Permanente de Administración • La Cripta' });
 
-    // Fila 1: Gestión de Huesos y Sorteos
+    // Fila 1: Gestión de Huesos, Bone Party y Sorteos
     const fila1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('admin:panel_dar_huesos:admin')
@@ -94,9 +94,14 @@ async function construirPanelAdmin(guildId) {
             .setEmoji('💸')
             .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
+            .setCustomId('admin:panel_party:admin')
+            .setLabel('Bone Party (Todos)')
+            .setEmoji('🎉')
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
             .setCustomId('admin:panel_sorteo:admin')
             .setLabel('Sorteo / Drop')
-            .setEmoji('🎉')
+            .setEmoji('🎁')
             .setStyle(ButtonStyle.Primary)
     );
 
