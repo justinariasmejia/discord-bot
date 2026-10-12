@@ -24,6 +24,7 @@ const {
 } = require('../utils/paneles');
 const { obtenerUsuario } = require('../services/economia');
 const { logApuesta } = require('../services/logger');
+const tiradasEnProgreso = new Set(); // duenoId -> booleano para anti-concurrencia
 const { base, COLORES, formatoNum } = require('../utils/embeds');
 const config = require('../data/config');
 
@@ -49,6 +50,14 @@ async function responderInicial(interaction, payload) {
 }
 
 async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
+    // 🛡️ Anti-Spam: Bloquear si ya hay un giro o cálculo activo para este cazador
+    if (tiradasEnProgreso.has(duenoId)) {
+        return responderInicial(interaction, {
+            content: '⏳ Ya tienes una apuesta en proceso. Espera a que termine tu jugada.',
+            flags: MessageFlags.Ephemeral,
+        });
+    }
+
     // 🛡️ Pre-chequeo de cooldown inteligente antes de iniciar animaciones o consumir API
     const cdPrev = consultarCooldown(duenoId);
     if (cdPrev.enCooldown) {
@@ -59,6 +68,8 @@ async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
         const embedCd = base('🎰 Pausa de Enfriamiento', aviso, COLORES.morado);
         return responderInicial(interaction, { embeds: [embedCd], components: [filaVolver(duenoId)] });
     }
+    tiradasEnProgreso.add(duenoId);
+    try {
     if (tipoJuego === 'cara_cruz') {
         await responderInicial(interaction, panelAnimacionApuesta('cara_cruz', { monto, eleccion: extra }));
         await new Promise((r) => setTimeout(r, 2200));
@@ -108,6 +119,9 @@ async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
     if (tipoJuego === 'ruleta') {
         const res = await apostarRuleta(duenoId, interaction.guildId, monto, extra);
         return responderInicial(interaction, panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
+        }
+    } finally {
+        tiradasEnProgreso.delete(duenoId);
     }
 }
 
@@ -117,6 +131,14 @@ module.exports = {
     async ejecutar(interaction, partes) {
         const accion = partes[1];
         const duenoId = partes[2];
+
+        // 🛡️ Seguridad: Evitar que usuarios interactúen con paneles de apuestas ajenos
+        if (duenoId && duenoId !== 'todos' && interaction.user.id !== duenoId) {
+            return interaction.reply({
+                content: '🔒 Esta consola de apuestas le pertenece a otro cazador. Usa `/cripta` para apostar tus propios huesos.',
+                flags: MessageFlags.Ephemeral,
+            });
+        }
 
         // ── 1. Girar Tragamonedas Directo (1 Clic) ──
         if (accion === 'girar_traga') {

@@ -98,6 +98,9 @@ module.exports = {
                         COLORES.negro
                     );
                     await msgPublico.edit({ embeds: [embedExpirado], components: [filaInvitacionDuelo(duelo._id.toString(), true)] }).catch(() => null);
+                    setTimeout(() => {
+                        msgPublico.delete().catch(() => null);
+                    }, 12000);
                 }
             }, config.DUELOS.TIMEOUT_ACEPTAR_MS);
 
@@ -210,7 +213,10 @@ module.exports = {
             await interaction.deferUpdate();
             const msg = await interaction.channel.messages.fetch(duelo.mensajeId).catch(() => null);
             if (msg) {
-                await msg.edit({ embeds: [embedCancel], components: [] });
+                await msg.edit({ embeds: [embedCancel], components: [] }).catch(() => null);
+                setTimeout(() => {
+                    msg.delete().catch(() => null);
+                }, 12000);
             }
             return;
         }

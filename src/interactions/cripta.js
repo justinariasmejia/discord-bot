@@ -17,7 +17,7 @@ const { obtenerRanking } = require('../services/ranking');
 const { iniciarRondaGrupal, consultarCooldownRuleta } = require('../services/ruletaGrupal');
 const configBalance = require('../data/config');
 const { logCaza, logDiario } = require('../services/logger');
-const { base, COLORES } = require('../utils/embeds');
+const { base, COLORES, formatoNum } = require('../utils/embeds');
 const {
     panelMenu,
     panelPerfil,
@@ -39,6 +39,14 @@ module.exports = {
         const accion = partes[1];
         const duenoId = partes[2];
         const extra = partes[3];
+
+        // 🛡️ Seguridad: Evitar que usuarios interactúen con paneles ajenos
+        if (duenoId && duenoId !== 'todos' && duenoId !== 'admin' && interaction.user.id !== duenoId) {
+            return interaction.reply({
+                content: '🔒 Este panel le pertenece a otro cazador. Usa `/cripta` para abrir tu propio centro de mando.',
+                flags: MessageFlags.Ephemeral,
+            });
+        }
 
         const { obtenerConfig } = require('../services/evento');
         const conf = await obtenerConfig(interaction.guildId);

@@ -113,12 +113,20 @@ function iniciarServicioVoz(client) {
                     const miembros = canal.members.filter((m) => !m.user.bot);
                     const minimoRequerido = config.ACTIVIDAD?.VOZ?.MINIMO_MIEMBROS || 1;
 
-                    // Mínimo 1 persona en la sala para premiar actividad en cualquier canal de voz
-                    if (miembros.size < minimoRequerido) continue;
+                    // Mínimo 2 personas en la sala para premiar actividad e impedir фарм en solitario
+                    if (miembros.size < Math.max(2, minimoRequerido)) continue;
+
+                    // Excluir canal AFK del servidor si existe
+                    if (guild.afkChannelId && canal.id === guild.afkChannelId) continue;
 
                     for (const miembro of miembros.values()) {
-                        // Si está ensordecido (deaf / selfDeaf), no está participando activamente
-                        if (miembro.voice.deaf || miembro.voice.selfDeaf) continue;
+                        // Si está ensordecido o silenciado (mute, deaf, selfMute, selfDeaf), no está participando activamente
+                        if (
+                            miembro.voice.deaf ||
+                            miembro.voice.selfDeaf ||
+                            miembro.voice.mute ||
+                            miembro.voice.selfMute
+                        ) continue;
 
                         // Si el usuario o su rol está en la lista negra, no recibe recompensas
                         if (estaEnBlacklist(miembro, conf)) continue;

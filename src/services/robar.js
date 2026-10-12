@@ -40,9 +40,14 @@ async function robar(ladronId, victimaId, guildId, client) {
         } catch { /* ignorar */ }
     }
 
-    const cd = verificarCooldownRobo(ladronId);
-    if (cd.enCooldown) {
-        return { ok: false, motivo: 'cooldown', proximo: cd.proximo };
+    const ladronPrevio = await obtenerUsuario(ladronId, guildId);
+    const ahora = Date.now();
+    const ultimoRoboDb = ladronPrevio.ultimoRobo ? ladronPrevio.ultimoRobo.getTime() : 0;
+    const ultimoRoboMem = cooldownsRobo.get(ladronId) || 0;
+    const ultimoEfectivo = Math.max(ultimoRoboDb, ultimoRoboMem);
+
+    if (ultimoEfectivo && ahora - ultimoEfectivo < config.ROBAR.COOLDOWN_MS) {
+        return { ok: false, motivo: 'cooldown', proximo: ultimoEfectivo + config.ROBAR.COOLDOWN_MS };
     }
 
     // Bloqueo dual en orden consistente para evitar interbloqueos
@@ -64,7 +69,9 @@ async function robar(ladronId, victimaId, guildId, client) {
 
             // Inmunidad por Amuleto
             if (tieneEfectoActivo(victima, 'amuleto')) {
-                cooldownsRobo.set(ladronId, Date.now());
+                const ahoraRobo = Date.now();
+            cooldownsRobo.set(ladronId, ahoraRobo);
+            await Usuario.updateOne({ userId: ladronId, guildId }, { $set: { ultimoRobo: new Date(ahoraRobo) } }).catch(() => null);
     if (cooldownsRobo.size > 2000) {
         const limite = Date.now() - config.ROBAR.COOLDOWN_MS;
         for (const [id, ts] of cooldownsRobo.entries()) {

@@ -213,19 +213,16 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
         `👑 **Ganador:** <@${ganadorId}>\n` +
         `💀 **Derrotado:** <@${perdedorId}>\n` +
         `💰 **Premio entregado:** **+${formatoNum(premio)}** huesos 🦴\n` +
-        `🏛️ _Comisión de la Cripta (5%): ${formatoNum(corteCasa)} huesos_`,
+        `🏛️ _Comisión de la Cripta (5%): ${formatoNum(corteCasa)} huesos_\n\n` +
+        `⏱️ _Este mensaje se eliminará automáticamente en 15 segundos y quedará registrado en los logs públicos._`,
         COLORES.verde
     );
 
     if (mensaje) {
         await mensaje.edit({ content: null, embeds: [embedFinal], components: [] }).catch(() => null);
-    }
-
-    // Publicar anuncio final del vencedor en el mismo canal donde se disputó
-    if (canal && canal.send) {
-        await canal.send({
-            content: `🎉 ¡<@${ganadorId}> derrotó a <@${perdedorId}> en el duelo y se lleva **+${formatoNum(premio)}** huesos! 🦴`,
-        }).catch(() => null);
+        setTimeout(() => {
+            mensaje.delete().catch(() => null);
+        }, 15000);
     }
 }
 

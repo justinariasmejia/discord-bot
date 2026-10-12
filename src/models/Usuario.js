@@ -10,6 +10,7 @@ const usuarioSchema = new Schema(
         ultimoDiario: { type: Date, default: null },
         ultimoCazar: { type: Date, default: null },
         ultimaLimosna: { type: Date, default: null },
+        ultimoRobo: { type: Date, default: null },
         inventario: [{ _id: false, itemId: String, cantidad: { type: Number, default: 0 } }],
         efectos: [{ _id: false, tipo: String, expiraEn: Date, usosRestantes: Number, valor: Number }],
         estadisticas: {

@@ -148,7 +148,7 @@ async function lanzarTrivia(guildId, client) {
     if (!canal || !canal.isTextBased()) return null;
 
     const triviaItem = PREGUNTAS_TRIVIA[Math.floor(Math.random() * PREGUNTAS_TRIVIA.length)];
-    const premio = 100;
+    const premio = Math.floor(Math.random() * 76) + 175; // 175 a 250 huesos
     const expiraEn = new Date(Date.now() + 90 * 1000); // 90 segundos
 
     const letras = ['A', 'B', 'C', 'D'];
@@ -183,7 +183,7 @@ async function lanzarTrivia(guildId, client) {
     );
 
     const fila = new ActionRowBuilder().addComponents(botones);
-    const avisoNoti = config.rolNotificacionesEventoId ? `🔔 <@&${config.rolNotificacionesEventoId}> ¡Nueva Trivia del Terror disponible!` : undefined;
+    const avisoNoti = config.rolNotificacionesEventoId ? `🔔 <@&${config.rolNotificacionesEventoId}> ¡Nueva Trivia del Terror disponible! Botín: **+${premio}** huesos 🦴.` : undefined;
     const mensaje = await canal.send({
         content: avisoNoti,
         embeds: [embed],
@@ -332,8 +332,8 @@ async function forzarEvento(guildId, client, tipoEvento) {
 
 // ── 6. SERVICIO EN SEGUNDO PLANO (Scheduler) ──
 function iniciarServicioEventosAleatorios(client) {
-    // Revisa cada 20 minutos si lanza un evento espontáneo en los servidores
-    const INTERVALO_MS = 20 * 60 * 1000;
+    // Revisa cada 10 minutos para mantener el servidor dinámico y con trivias frecuentes
+    const INTERVALO_MS = 10 * 60 * 1000;
 
     setInterval(async () => {
         try {
@@ -344,9 +344,10 @@ function iniciarServicioEventosAleatorios(client) {
                 const canalId = obtenerCanalApariciones(config);
                 if (!canalId) continue;
 
-                // 65% de probabilidad de que ocurra un evento en este ciclo
-                if (Math.random() < 0.65) {
-                    const tipos = ['fantasma', 'trivia', 'huesos'];
+                // 85% de probabilidad de que ocurra un evento en este ciclo
+                if (Math.random() < 0.85) {
+                    // 50% de probabilidad para Trivia del Terror para máxima participación
+                    const tipos = ['trivia', 'trivia', 'fantasma', 'huesos'];
                     const elegido = tipos[Math.floor(Math.random() * tipos.length)];
                     await forzarEvento(guild.id, client, elegido);
                 }
@@ -356,7 +357,7 @@ function iniciarServicioEventosAleatorios(client) {
         }
     }, INTERVALO_MS);
 
-    console.log('🎃 Servicio de Eventos Aleatorios iniciado (intervalo: 20m).');
+    console.log('🎃 Servicio de Eventos Aleatorios iniciado (intervalo: 10m, trivias priorizadas).');
 }
 
 module.exports = {
