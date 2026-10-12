@@ -425,7 +425,7 @@ function panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra) {
     if (!res || !res.ok) {
         let mensaje = 'No se pudo procesar la apuesta.';
         if (res?.motivo === 'saldo_insuficiente') mensaje = 'No tienes suficientes huesos para esta apuesta.';
-        if (res?.motivo === 'cooldown') mensaje = `Espera **${Math.ceil((res.restanteMs || 3000) / 1000)}s** antes de volver a apostar.`;
+        if (res?.motivo === 'cooldown') mensaje = `⏳ **Cooldown Inteligente Activo:** Debes esperar **${Math.ceil((res.restanteMs || 15000) / 1000)}s** antes de tu siguiente giro.\n\n🔥 *Los descansos progresivos evitan spam y protegen tus huesos.*`;
         if (res?.motivo === 'invalido') mensaje = res.detalle || 'Monto o apuesta inválida.';
         if (res?.motivo === 'ocupado') mensaje = 'Se está procesando otra acción con tus huesos. Inténtalo de nuevo.';
         if (res?.motivo === 'evento_cerrado') mensaje = 'La Cripta ya ha cerrado sus puertas por esta temporada.';

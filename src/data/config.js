@@ -49,7 +49,7 @@ module.exports = {
         MINIMA: 10,
         MAXIMA_ABSOLUTA: 5000,
         MAXIMO_PORCENTAJE: 0.50,      // Máximo el 50% del saldo actual
-        COOLDOWN_MS: 5000,            // 5 segundos entre apuestas por usuario
+        COOLDOWN_MS: 15000,           // 15 segundos base de cooldown inteligente por usuario
         DELAY_ANIMACION_MS: 1100,     // Retardo entre frames de animación de apuestas
 
         // Cara o Cruz

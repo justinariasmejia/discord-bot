@@ -6,25 +6,79 @@ const { obtenerConfig, eventoActivo } = require('./evento');
 const { conBloqueo } = require('../utils/locks');
 const config = require('../data/config');
 
-const cooldownsApuesta = new Map();
+// ── Cooldown Inteligente Progresivo (Anti-Spam de Tragamonedas y Casino) ──
+// Registra tiros seguidos para escalar el tiempo de enfriamiento si alguien spamea botones.
+const estadosApuestas = new Map(); // userId -> { ultimoTiro, tirosSeguidos, cooldownActualMs }
 
-function verificarCooldown(userId) {
+function calcularCooldownInteligente(tirosSeguidos, tipoJuego) {
+    const esTraga = tipoJuego === 'tragamonedas';
+    const baseMs = esTraga ? 15000 : 10000; // 15s para tragamonedas, 10s para otros juegos
+
+    if (tirosSeguidos <= 3) return baseMs;                       // Tiros 1 a 3: 15s
+    if (tirosSeguidos <= 6) return esTraga ? 30000 : 20000;       // Tiros 4 a 6: 30s
+    if (tirosSeguidos <= 9) return esTraga ? 60000 : 40000;       // Tiros 7 a 9: 60s
+    return esTraga ? 120000 : 60000;                              // 10+ tiros consecutivos: 120s (2m pausa)
+}
+
+function consultarCooldown(userId) {
     const ahora = Date.now();
-    const ultimo = cooldownsApuesta.get(userId);
-    if (ultimo && ahora - ultimo < config.APUESTAS.COOLDOWN_MS) {
+    const estado = estadosApuestas.get(userId);
+    if (!estado) return { enCooldown: false, tirosSeguidos: 0 };
+
+    const tiempoPasado = ahora - estado.ultimoTiro;
+    if (tiempoPasado < estado.cooldownActualMs) {
         return {
             enCooldown: true,
-            restanteMs: config.APUESTAS.COOLDOWN_MS - (ahora - ultimo),
+            restanteMs: estado.cooldownActualMs - tiempoPasado,
+            tirosSeguidos: estado.tirosSeguidos,
         };
     }
-    cooldownsApuesta.set(userId, ahora);
-    if (cooldownsApuesta.size > 2000) {
-        const limite = ahora - config.APUESTAS.COOLDOWN_MS;
-        for (const [id, ts] of cooldownsApuesta.entries()) {
-            if (ts < limite) cooldownsApuesta.delete(id);
+    return { enCooldown: false, tirosSeguidos: estado.tirosSeguidos };
+}
+
+function verificarCooldown(userId, tipoJuego = 'general') {
+    const ahora = Date.now();
+    let estado = estadosApuestas.get(userId);
+
+    if (estado) {
+        const tiempoPasado = ahora - estado.ultimoTiro;
+
+        // Si todavía está en enfriamiento activo
+        if (tiempoPasado < estado.cooldownActualMs) {
+            return {
+                enCooldown: true,
+                restanteMs: estado.cooldownActualMs - tiempoPasado,
+                tirosSeguidos: estado.tirosSeguidos,
+            };
+        }
+
+        // Si descansó más de 60 segundos, su racha de tiros seguidos se reinicia
+        if (tiempoPasado > 60000) {
+            estado.tirosSeguidos = 1;
+        } else {
+            estado.tirosSeguidos += 1;
+        }
+    } else {
+        estado = {
+            ultimoTiro: 0,
+            tirosSeguidos: 1,
+            cooldownActualMs: 15000,
+        };
+        estadosApuestas.set(userId, estado);
+    }
+
+    estado.ultimoTiro = ahora;
+    estado.cooldownActualMs = calcularCooldownInteligente(estado.tirosSeguidos, tipoJuego);
+
+    // Limpieza periódica de memoria
+    if (estadosApuestas.size > 2000) {
+        const limite = ahora - 180000;
+        for (const [id, est] of estadosApuestas.entries()) {
+            if (est.ultimoTiro < limite) estadosApuestas.delete(id);
         }
     }
-    return { enCooldown: false };
+
+    return { enCooldown: false, tirosSeguidos: estado.tirosSeguidos, cooldownActualMs: estado.cooldownActualMs };
 }
 
 function validarApuesta(usuario, monto) {
@@ -76,7 +130,7 @@ async function apostarCaraCruz(userId, guildId, monto, eleccion) {
     const confEvento = await obtenerConfig(guildId);
     if (!eventoActivo(confEvento) || confEvento.modoTest) return { ok: false, motivo: 'evento_cerrado' };
 
-    const cd = verificarCooldown(userId);
+    const cd = verificarCooldown(userId, 'cara_cruz');
     if (cd.enCooldown) return { ok: false, motivo: 'cooldown', restanteMs: cd.restanteMs };
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
@@ -133,7 +187,7 @@ async function apostarDados(userId, guildId, monto, tipoTier, valorExtra) {
     const confEvento = await obtenerConfig(guildId);
     if (!eventoActivo(confEvento)) return { ok: false, motivo: 'evento_cerrado' };
 
-    const cd = verificarCooldown(userId);
+    const cd = verificarCooldown(userId, 'dados');
     if (cd.enCooldown) return { ok: false, motivo: 'cooldown', restanteMs: cd.restanteMs };
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
@@ -218,7 +272,7 @@ async function apostarRuleta(userId, guildId, monto, colorElegido) {
     const confEvento = await obtenerConfig(guildId);
     if (!eventoActivo(confEvento)) return { ok: false, motivo: 'evento_cerrado' };
 
-    const cd = verificarCooldown(userId);
+    const cd = verificarCooldown(userId, 'ruleta');
     if (cd.enCooldown) return { ok: false, motivo: 'cooldown', restanteMs: cd.restanteMs };
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
@@ -293,7 +347,7 @@ async function apostarTragamonedas(userId, guildId, monto) {
     const confEvento = await obtenerConfig(guildId);
     if (!eventoActivo(confEvento) || confEvento.modoTest) return { ok: false, motivo: 'evento_cerrado' };
 
-    const cd = verificarCooldown(userId);
+    const cd = verificarCooldown(userId, 'tragamonedas');
     if (cd.enCooldown) return { ok: false, motivo: 'cooldown', restanteMs: cd.restanteMs };
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
@@ -360,6 +414,8 @@ async function apostarTragamonedas(userId, guildId, monto) {
 }
 
 module.exports = {
+    verificarCooldown,
+    consultarCooldown,
     validarApuesta,
     calcularProbabilidad,
     apostarCaraCruz,

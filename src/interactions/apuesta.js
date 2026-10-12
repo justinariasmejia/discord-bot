@@ -15,6 +15,7 @@ const {
     apostarRuleta,
     apostarTragamonedas,
     validarApuesta,
+    consultarCooldown,
 } = require('../services/apuestas');
 const {
     panelAnimacionApuesta,
@@ -48,6 +49,16 @@ async function responderInicial(interaction, payload) {
 }
 
 async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
+    // 🛡️ Pre-chequeo de cooldown inteligente antes de iniciar animaciones o consumir API
+    const cdPrev = consultarCooldown(duenoId);
+    if (cdPrev.enCooldown) {
+        const segs = Math.ceil(cdPrev.restanteMs / 1000);
+        const aviso = cdPrev.tirosSeguidos > 3
+            ? `🔥 **Máquina Sobrecalentada:** Llevas **${cdPrev.tirosSeguidos} tiros seguidos**.\n\nDebes esperar **${segs}s** para que los carretes se enfríen y cuidar tus huesos.`
+            : `⏳ **Cooldown Activo:** Debes esperar **${segs}s** antes de tu siguiente jugada.`;
+        const embedCd = base('🎰 Pausa de Enfriamiento', aviso, COLORES.morado);
+        return responderInicial(interaction, { embeds: [embedCd], components: [filaVolver(duenoId)] });
+    }
     if (tipoJuego === 'cara_cruz') {
         await responderInicial(interaction, panelAnimacionApuesta('cara_cruz', { monto, eleccion: extra }));
         await new Promise((r) => setTimeout(r, 2200));

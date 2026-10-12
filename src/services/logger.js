@@ -122,11 +122,30 @@ async function logDiario(guildId, userId, resultado) {
     });
 }
 
+// Cooldown en memoria de logs para evitar saturación de canales por spam de tragamonedas
+const cooldownsLogsApuestas = new Map(); // userId -> timestamp
+
 // ── 3. LOG PÚBLICO: APUESTAS (Cara o Cruz, Tragamonedas, etc.) ──
 async function logApuesta(guildId, userId, resultado) {
     if (!resultado.ok) return;
     const gano = resultado.gana;
     const nombreJuego = resultado.juego === 'cara_cruz' ? '🪙 Cara o Cruz' : (resultado.juego === 'tragamonedas' ? '🎰 Tragamonedas' : resultado.juego);
+
+    // 🛡️ Filtro inteligente de spam en logs públicos:
+    // • Las victorias SIEMPRE se publican (para celebrar premios y botes).
+    // • Las pérdidas de montos pequeños (< 50 huesos) en tragamonedas NO se publican para no saturar el canal de logs.
+    // • Solo se publican pérdidas si el monto apostado es relevante (>= 50 huesos).
+    if (!gano && resultado.monto < 50) {
+        return; // No spamear el canal público con tiradas cotidianas perdidas de 10-25 huesos
+    }
+
+    // Throttle: Máximo 1 log de apuesta por usuario cada 15 segundos en el canal público
+    const ahora = Date.now();
+    const ultimoLog = cooldownsLogsApuestas.get(userId) || 0;
+    if (ahora - ultimoLog < 15000 && !gano) {
+        return;
+    }
+    cooldownsLogsApuestas.set(userId, ahora);
 
     const campos = [
         { name: '🎲 Juego', value: nombreJuego, inline: true },
