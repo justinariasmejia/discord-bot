@@ -46,6 +46,20 @@ module.exports = {
                         flags: MessageFlags.Ephemeral,
                     });
                 }
+                if (res.motivo === 'silenciado_oogie') {
+                    const unixDesbloqueo = Math.floor(new Date(res.expira).getTime() / 1000);
+                    return interaction.reply({
+                        content: `🐛 **Maldición de Oogie Boogie:** El Rey de los Bichos ha sellado tus duelos por cobardía o insolencia. Podrás retar nuevamente <t:${unixDesbloqueo}:R>.`,
+                        flags: MessageFlags.Ephemeral,
+                    });
+                }
+                if (res.motivo === 'rival_silenciado_oogie') {
+                    const unixDesbloqueo = Math.floor(new Date(res.expira).getTime() / 1000);
+                    return interaction.reply({
+                        content: `🐛 El rival <@${rivalId}> está bajo la maldición de silencio de Oogie Boogie y no puede batirse en duelo hasta <t:${unixDesbloqueo}:R>.`,
+                        flags: MessageFlags.Ephemeral,
+                    });
+                }
                 if (res.motivo === 'blacklist') {
                     return interaction.reply({
                         content: '🚫 Uno de los participantes está en la lista negra y no puede participar en duelos.',
@@ -125,6 +139,15 @@ module.exports = {
             if (interaction.user.id !== duelo.rivalId) {
                 return interaction.reply({
                     content: '🔒 Solo el usuario retado puede aceptar este duelo.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            const rivalPre = await obtenerUsuario(interaction.user.id, interaction.guildId);
+            if (rivalPre.silencioApuestasHasta && Date.now() < rivalPre.silencioApuestasHasta.getTime()) {
+                const unixDesbloqueo = Math.floor(rivalPre.silencioApuestasHasta.getTime() / 1000);
+                return interaction.reply({
+                    content: `🐛 No puedes aceptar duelos: estás bajo la maldición de Oogie Boogie hasta <t:${unixDesbloqueo}:R>.`,
                     flags: MessageFlags.Ephemeral,
                 });
             }

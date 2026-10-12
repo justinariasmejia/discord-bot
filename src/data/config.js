@@ -142,4 +142,22 @@ module.exports = {
         PERDIDA_MIN_PCT: 0.01,           // Pierde entre 1% y 3% de sus huesos
         PERDIDA_MAX_PCT: 0.03,
     },
+
+    // ─── Oogie Boogie: El Estafador de la Cripta ───
+    OOGIE_BOOGIE: {
+        HABILITADO: true,
+        PROBABILIDAD_CICLO: 0.15,            // 15% de probabilidad por ciclo de scheduler (10 min)
+        COOLDOWN_GLOBAL_MS: 45 * 60 * 1000,  // Máximo 1 aparición cada 45 minutos por servidor
+        MAX_VICTIMAS: 2,                     // 1 a 2 víctimas por aparición
+        TOP_CANDIDATOS: 10,                  // Universo del ranking evaluado para el focus
+        PORCENTAJE_APUESTA: 0.18,            // 18% del saldo actual de la víctima como apuesta forzada
+        PENALIZACION_HUIR_PCT: 0.08,         // 8% de pérdida total por huir (cobardía)
+        PENALIZACION_IGNORAR_PCT: 0.12,      // 12% de pérdida total por no responder en el tiempo límite
+        TIEMPO_RESPUESTA_MS: 90 * 1000,      // 90 segundos para responder
+        SILENCIO_HUIR_MS: 30 * 60 * 1000,    // 30 min sin apostar ni duelos tras huir
+        SILENCIO_IGNORAR_MS: 45 * 60 * 1000, // 45 min sin apostar ni duelos tras ignorar
+        MULTIPLICADOR_GANANCIA: 1.45,        // Si el cazador vence a las trampas: recupera apuesta + 45% neto
+        GIF_APARICION_URL: 'https://static.klipy.com/ii/4e7bea9f7a3371424e6c16ebc93252fe/3e/f5/DFkxNRYtOGggcLUs20aG.gif', // GIF de aparición de Oogie Boogie
+    },
 };
+

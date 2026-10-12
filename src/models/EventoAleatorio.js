@@ -6,7 +6,7 @@ const eventoAleatorioSchema = new Schema({
     guildId: { type: String, required: true },
     canalId: { type: String, required: true },
     mensajeId: { type: String, required: true },
-    tipo: { type: String, enum: ['fantasma', 'trivia', 'cofre', 'huesos'], required: true },
+    tipo: { type: String, enum: ['fantasma', 'trivia', 'cofre', 'huesos', 'oogie_boogie'], required: true },
     reclamado: { type: Boolean, default: false },
     reclamadoPor: { type: String, default: null },
     datos: { type: Schema.Types.Mixed, default: {} },

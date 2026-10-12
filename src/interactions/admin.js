@@ -532,6 +532,7 @@ module.exports = {
                     { label: '🎃 Trivia del Terror', value: 'trivia', description: 'Pregunta de terror con 4 opciones' },
                     { label: '🦴 Montón de Huesos', value: 'cofre', description: 'Botín libre en el cementerio para el primero' },
                     { label: '🌕 Eclipse Espectral (x2)', value: 'eclipse_2x', description: 'Multiplicador doble para todo el server (30m)' },
+                    { label: '🎲 Oogie Boogie', value: 'oogie_boogie', description: 'Monstruo tramposo que desafía a los más ricos con apuestas' },
                 ]);
 
             return interaction.reply({

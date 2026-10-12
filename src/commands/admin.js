@@ -144,7 +144,8 @@ module.exports = {
                             { name: '👻 Fantasma Fugaz', value: 'fantasma' },
                             { name: '🎃 Trivia del Terror', value: 'trivia' },
                             { name: '🗝️ Cofre Maldito', value: 'cofre' },
-                            { name: '🌕 Eclipse Espectral (x2)', value: 'eclipse_2x' }
+                            { name: '🌕 Eclipse Espectral (x2)', value: 'eclipse_2x' },
+                            { name: '🎲 Oogie Boogie', value: 'oogie_boogie' }
                         )
                 )
         )

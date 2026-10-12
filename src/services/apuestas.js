@@ -47,10 +47,20 @@ async function sincronizarYConsultarCooldown(userId, guildId) {
     const ahora = Date.now();
     let estado = estadosApuestas.get(userId);
 
-    // Si no está en memoria, consultar la base de datos
-    if (!estado && guildId) {
+    // Chequeo prioritario de silencio por maldición de Oogie Boogie
+    if (guildId) {
         const usuario = await obtenerUsuario(userId, guildId).catch(() => null);
-        if (usuario && usuario.bloqueoApuestasHasta && ahora < usuario.bloqueoApuestasHasta.getTime()) {
+        if (usuario && usuario.silencioApuestasHasta && ahora < usuario.silencioApuestasHasta.getTime()) {
+            return {
+                enCooldown: true,
+                restanteMs: usuario.silencioApuestasHasta.getTime() - ahora,
+                tirosSeguidos: 0,
+                esSilencioOogie: true,
+            };
+        }
+
+        // Si no está en memoria, consultar si tenía bloqueo por fatiga en la base de datos
+        if (!estado && usuario && usuario.bloqueoApuestasHasta && ahora < usuario.bloqueoApuestasHasta.getTime()) {
             estado = {
                 ultimoTiro: usuario.ultimoTiroApuesta ? usuario.ultimoTiroApuesta.getTime() : ahora,
                 tirosSeguidos: usuario.rachaApuestas || 15,
@@ -506,6 +516,7 @@ async function apostarTragamonedas(userId, guildId, monto) {
 module.exports = {
     verificarCooldown,
     consultarCooldown,
+    sincronizarYConsultarCooldown,
     validarApuesta,
     calcularProbabilidad,
     apostarCaraCruz,

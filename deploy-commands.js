@@ -28,16 +28,16 @@ const rest = new REST().setToken(process.env.DISCORD_TOKEN);
         );
         console.log(`✅ ${data.length} comandos slash globales registrados.`);
 
-        // Limpiar comandos a nivel de servidor para evitar duplicados en la lista de Discord
+        // Registrar a nivel de cada servidor para disponibilidad instantánea (0 latencia de propagación)
         const guilds = await rest.get(Routes.userGuilds());
         for (const g of guilds) {
             await rest.put(
                 Routes.applicationGuildCommands(process.env.CLIENT_ID, g.id),
-                { body: [] }
+                { body: comandos }
             );
-            console.log(`   └─ ✅ Limpiados comandos duplicados de servidor en: ${g.name}`);
+            console.log(`   └─ ⚡ Comandos actualizados instantáneamente en: ${g.name} (${g.id})`);
         }
-        console.log('🎉 ¡Todos los comandos están activos sin duplicados en Discord!');
+        console.log('🎉 ¡Todos los comandos están activos e instantáneamente disponibles en Discord!');
     } catch (error) {
         console.error('❌ Error registrando comandos:', error);
     }

@@ -68,10 +68,10 @@ async function limpiarMensajesExpiradosCanal(client, guildId) {
 }
 
 // ── 1. FANTASMA FUGAZ ──
-async function aparecerFantasma(guildId, client) {
+async function aparecerFantasma(guildId, client, esForzado = false) {
     const config = await obtenerConfig(guildId);
     const canalId = obtenerCanalApariciones(config);
-    if (!eventoActivo(config) || config.modoTest || !canalId) return null;
+    if (!eventoActivo(config) || (!esForzado && config.modoTest) || !canalId) return null;
 
     const canal = client.channels.cache.get(canalId) ||
         (await client.channels.fetch(canalId).catch(() => null));
@@ -138,10 +138,10 @@ async function aparecerFantasma(guildId, client) {
 }
 
 // ── 2. TRIVIA DEL TERROR ──
-async function lanzarTrivia(guildId, client) {
+async function lanzarTrivia(guildId, client, esForzado = false) {
     const config = await obtenerConfig(guildId);
     const canalId = obtenerCanalApariciones(config);
-    if (!eventoActivo(config) || config.modoTest || !canalId) return null;
+    if (!eventoActivo(config) || (!esForzado && config.modoTest) || !canalId) return null;
 
     const canal = client.channels.cache.get(canalId) ||
         (await client.channels.fetch(canalId).catch(() => null));
@@ -219,10 +219,10 @@ async function lanzarTrivia(guildId, client) {
 }
 
 // ── 3. APARICIÓN DE HUESOS (Antiguo Cofre Libre) ──
-async function aparecerHuesos(guildId, client) {
+async function aparecerHuesos(guildId, client, esForzado = false) {
     const config = await obtenerConfig(guildId);
     const canalId = obtenerCanalApariciones(config);
-    if (!eventoActivo(config) || config.modoTest || !canalId) return null;
+    if (!eventoActivo(config) || (!esForzado && config.modoTest) || !canalId) return null;
 
     const canal = client.channels.cache.get(canalId) ||
         (await client.channels.fetch(canalId).catch(() => null));
@@ -321,32 +321,230 @@ async function activarMultiplicadorGlobal(guildId, client, minutos = 30, factor 
     return { ok: true, factor, expira };
 }
 
-// ── 5. DISPARADOR MANUAL / FORZADO (Admin) ──
+// ── 5. APARICIÓN DE OOGIE BOOGIE (El Estafador de la Cripta) ──
+async function aparecerOogieBoogie(guildId, client, esForzado = false) {
+    const configGlobal = require('../data/config');
+    const oogieCfg = configGlobal.OOGIE_BOOGIE;
+    if (!oogieCfg?.HABILITADO) return null;
+
+    const confEvento = await obtenerConfig(guildId);
+    const canalId = obtenerCanalApariciones(confEvento);
+    if (!eventoActivo(confEvento) || (!esForzado && confEvento.modoTest) || !canalId) return null;
+
+    const canal = client.channels.cache.get(canalId) ||
+        (await client.channels.fetch(canalId).catch(() => null));
+    if (!canal || !canal.isTextBased()) return null;
+
+    // Buscar a los cazadores más ricos del servidor
+    const topCandidatos = await Usuario.find({ guildId, huesos: { $gt: 20 } })
+        .sort({ huesos: -1 })
+        .limit(oogieCfg.TOP_CANDIDATOS || 10)
+        .lean();
+
+    if (!topCandidatos || topCandidatos.length === 0) return null;
+
+    const totalHuesosTop = topCandidatos.reduce((sum, u) => sum + u.huesos, 0);
+    if (totalHuesosTop <= 0) return null;
+
+    // Selección ponderada por riqueza (mientras más huesos, mayor probabilidad matemática)
+    const numVictimas = Math.min(oogieCfg.MAX_VICTIMAS || 2, topCandidatos.length);
+    const victimasSeleccionadas = [];
+    const pool = [...topCandidatos];
+
+    for (let i = 0; i < numVictimas && pool.length > 0; i++) {
+        const pesoTotalActual = pool.reduce((s, u) => s + u.huesos, 0);
+        let rand = Math.random() * pesoTotalActual;
+        let elegidoIndex = 0;
+
+        for (let j = 0; j < pool.length; j++) {
+            rand -= pool[j].huesos;
+            if (rand <= 0) {
+                elegidoIndex = j;
+                break;
+            }
+        }
+
+        const elegido = pool.splice(elegidoIndex, 1)[0];
+        const apuesta = Math.max(10, Math.floor(elegido.huesos * (oogieCfg.PORCENTAJE_APUESTA || 0.18)));
+        victimasSeleccionadas.push({
+            userId: elegido.userId,
+            huesos: elegido.huesos,
+            apuesta,
+            estado: 'pendiente', // 'pendiente', 'aceptado', 'huido', 'ignorado'
+            resultado: null,
+        });
+    }
+
+    if (victimasSeleccionadas.length === 0) return null;
+
+    const expiraEn = new Date(Date.now() + (oogieCfg.TIEMPO_RESPUESTA_MS || 90000));
+    const porcentajePct = Math.round((oogieCfg.PORCENTAJE_APUESTA || 0.18) * 100);
+
+    let desc = 'El siniestro saco de arpillera repleto de bichos emerge de las sombras con sus dados trucados.\n' +
+        'Sus ojos incandescentes miran con desprecio a las mayores fortunas del cementerio:\n\n' +
+        '🎯 **Víctimas señaladas por el Rey del Miedo:**\n';
+
+    for (const v of victimasSeleccionadas) {
+        desc += `• <@${v.userId}> (**${formatoNum(v.huesos)}** 🦴) — 🎲 Apuesta forzada (${porcentajePct}%): **${formatoNum(v.apuesta)}** huesos\n`;
+    }
+
+    desc += '\n*"¡¡Jujajuajuajua!! ¿Creían que podían acaparar todos los huesos de MI cementerio sin pagarle tributo al Rey de Halloween? ' +
+        '¡O juegan a mis dados... o mis bichos devorarán sus riquezas!"*\n\n' +
+        `⏱️ **Tienen ${Math.round((oogieCfg.TIEMPO_RESPUESTA_MS || 90000) / 1000)} segundos** para responder.\n` +
+        `⚠️ **Huir** cuesta 8% de tu fortuna + 30m de silencio. **Ignorarlo** cuesta 12% + 45m de silencio.`;
+
+    const embed = base(
+        '🎲 ¡OOGIE BOOGIE HA SALIDO DE LAS SOMBRAS!',
+        desc,
+        COLORES.rojo
+    );
+
+    if (oogieCfg.GIF_APARICION_URL) {
+        embed.setImage(oogieCfg.GIF_APARICION_URL);
+    }
+
+    const docEvento = await EventoAleatorio.create({
+        guildId,
+        canalId: canal.id,
+        mensajeId: 'pendiente',
+        tipo: 'oogie_boogie',
+        datos: {
+            victimas: victimasSeleccionadas,
+            respondidos: 0,
+            totalVictimas: victimasSeleccionadas.length,
+        },
+        expiraEn,
+    });
+
+    const btnAceptar = new ButtonBuilder()
+        .setCustomId(`evento:oogie:todos:${docEvento._id}:aceptar`)
+        .setLabel('Aceptar el Desafío 🎲')
+        .setStyle(ButtonStyle.Danger);
+
+    const btnHuir = new ButtonBuilder()
+        .setCustomId(`evento:oogie:todos:${docEvento._id}:huir`)
+        .setLabel('Huir Cobardemente 🏃')
+        .setStyle(ButtonStyle.Secondary);
+
+    const fila = new ActionRowBuilder().addComponents(btnAceptar, btnHuir);
+
+    const menciones = victimasSeleccionadas.map(v => `<@${v.userId}>`).join(' ');
+    const avisoNoti = `🎲 **¡ATENCIÓN!** ${menciones} ¡Oogie Boogie los ha desafiado en el cementerio!`;
+
+    const mensaje = await canal.send({
+        content: avisoNoti,
+        embeds: [embed],
+        components: [fila],
+    }).catch(() => null);
+
+    if (!mensaje) return null;
+
+    docEvento.mensajeId = mensaje.id;
+    await docEvento.save();
+
+    // Timer para castigar a quienes ignoraron a Oogie Boogie
+    setTimeout(async () => {
+        try {
+            const ev = await EventoAleatorio.findById(docEvento._id);
+            if (!ev || ev.reclamado) return;
+
+            let huboIgnorados = false;
+            const ignoradosList = [];
+
+            for (const v of ev.datos.victimas) {
+                if (v.estado === 'pendiente') {
+                    v.estado = 'ignorado';
+                    huboIgnorados = true;
+
+                    // Penalización por ignorar: 12% de todo su patrimonio actual
+                    const uActual = await Usuario.findOne({ userId: v.userId, guildId });
+                    if (uActual && uActual.huesos > 0) {
+                        const penalizacion = Math.max(10, Math.floor(uActual.huesos * (oogieCfg.PENALIZACION_IGNORAR_PCT || 0.12)));
+                        await modificarHuesos(v.userId, guildId, -penalizacion, 'oogie_ignorado', 'Penalización por ignorar a Oogie Boogie');
+
+                        const silencioHasta = new Date(Date.now() + (oogieCfg.SILENCIO_IGNORAR_MS || 45 * 60 * 1000));
+                        uActual.silencioApuestasHasta = silencioHasta;
+                        await uActual.save();
+
+                        ignoradosList.push({ userId: v.userId, penalizacion });
+                    }
+                }
+            }
+
+            ev.reclamado = true;
+            ev.markModified('datos');
+            await ev.save();
+
+            const { solicitarActualizacionCripta } = require('./canalCripta');
+            solicitarActualizacionCripta(guildId);
+
+            if (huboIgnorados) {
+                let textoIgnorados = 'El tiempo expiró y los siguientes cazadores no se atrevieron a responder:\n\n';
+                for (const ig of ignoradosList) {
+                    textoIgnorados += `• <@${ig.userId}> perdió **-${formatoNum(ig.penalizacion)}** huesos y quedó silenciado de apuestas y duelos por 45 minutos.\n`;
+                }
+                textoIgnorados += '\n*"¡¡Jajaja!! ¡Nadie ignora a Oogie Boogie sin pagar el tributo!"*\n\n_Este mensaje desaparecerá en breve._';
+
+                const embedExpirado = base(
+                    '⏳ Tiempo Agotado — La Ira de Oogie Boogie',
+                    textoIgnorados,
+                    COLORES.negro
+                );
+
+                await mensaje.edit({ embeds: [embedExpirado], components: [] }).catch(() => null);
+            } else {
+                await mensaje.edit({ components: [] }).catch(() => null);
+            }
+
+            setTimeout(async () => {
+                await eliminarMensajeSeguro(canal, mensaje.id, mensaje);
+            }, 15000);
+        } catch (err) {
+            console.error('⚠️ Error al resolver timeout de Oogie Boogie:', err);
+        }
+    }, oogieCfg.TIEMPO_RESPUESTA_MS || 90000);
+
+    return docEvento;
+}
+
+// ── 6. DISPARADOR MANUAL / FORZADO (Admin) ──
 async function forzarEvento(guildId, client, tipoEvento) {
-    if (tipoEvento === 'fantasma') return aparecerFantasma(guildId, client);
-    if (tipoEvento === 'trivia') return lanzarTrivia(guildId, client);
-    if (tipoEvento === 'cofre' || tipoEvento === 'huesos') return aparecerHuesos(guildId, client);
+    if (tipoEvento === 'fantasma') return aparecerFantasma(guildId, client, true);
+    if (tipoEvento === 'trivia') return lanzarTrivia(guildId, client, true);
+    if (tipoEvento === 'cofre' || tipoEvento === 'huesos') return aparecerHuesos(guildId, client, true);
     if (tipoEvento === 'eclipse_2x') return activarMultiplicadorGlobal(guildId, client, 30, 2);
+    if (tipoEvento === 'oogie' || tipoEvento === 'oogie_boogie') return aparecerOogieBoogie(guildId, client, true);
     return null;
 }
 
-// ── 6. SERVICIO EN SEGUNDO PLANO (Scheduler) ──
+// ── 7. SERVICIO EN SEGUNDO PLANO (Scheduler) ──
+const cooldownOogiePorGuild = new Map(); // guildId -> timestamp última aparición de Oogie
+
 function iniciarServicioEventosAleatorios(client) {
-    // Revisa cada 10 minutos para mantener el servidor dinámico y con trivias frecuentes
     const INTERVALO_MS = 10 * 60 * 1000;
 
     setInterval(async () => {
         try {
             for (const guild of client.guilds.cache.values()) {
                 const config = await ConfigEvento.findOne({ guildId: guild.id });
-                // En mantenimiento/modoTest no se lanzan eventos aleatorios automáticos
                 if (!config || !eventoActivo(config) || config.modoTest) continue;
                 const canalId = obtenerCanalApariciones(config);
                 if (!canalId) continue;
 
-                // 85% de probabilidad de que ocurra un evento en este ciclo
+                const oogieCfg = require('../data/config').OOGIE_BOOGIE;
+                const ultimoOogie = cooldownOogiePorGuild.get(guild.id) || 0;
+                const ahora = Date.now();
+                const cdOogieMs = oogieCfg?.COOLDOWN_GLOBAL_MS || 45 * 60 * 1000;
+
+                // Evaluar aparición de Oogie Boogie si está en cooldown apto y supera la probabilidad del 15%
+                if (oogieCfg?.HABILITADO && ahora - ultimoOogie >= cdOogieMs && Math.random() < (oogieCfg.PROBABILIDAD_CICLO || 0.15)) {
+                    cooldownOogiePorGuild.set(guild.id, ahora);
+                    await forzarEvento(guild.id, client, 'oogie_boogie');
+                    continue;
+                }
+
+                // 85% de probabilidad de que ocurra un evento regular en este ciclo
                 if (Math.random() < 0.85) {
-                    // 50% de probabilidad para Trivia del Terror para máxima participación
                     const tipos = ['trivia', 'trivia', 'fantasma', 'huesos'];
                     const elegido = tipos[Math.floor(Math.random() * tipos.length)];
                     await forzarEvento(guild.id, client, elegido);
@@ -357,7 +555,7 @@ function iniciarServicioEventosAleatorios(client) {
         }
     }, INTERVALO_MS);
 
-    console.log('🎃 Servicio de Eventos Aleatorios iniciado (intervalo: 10m, trivias priorizadas).');
+    console.log('🎃 Servicio de Eventos Aleatorios iniciado (intervalo: 10m, Oogie Boogie habilitado).');
 }
 
 module.exports = {
@@ -365,6 +563,7 @@ module.exports = {
     lanzarTrivia,
     aparecerHuesos,
     aparecerCofre: aparecerHuesos,
+    aparecerOogieBoogie,
     activarMultiplicadorGlobal,
     forzarEvento,
     iniciarServicioEventosAleatorios,

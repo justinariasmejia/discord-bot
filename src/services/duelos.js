@@ -69,6 +69,15 @@ async function crearDuelo(guildId, canalId, retadorId, rivalId, monto) {
     }
 
     const retador = await obtenerUsuario(retadorId, guildId);
+    if (retador.silencioApuestasHasta && Date.now() < retador.silencioApuestasHasta.getTime()) {
+        return { ok: false, motivo: 'silenciado_oogie', expira: retador.silencioApuestasHasta };
+    }
+
+    const rival = await obtenerUsuario(rivalId, guildId);
+    if (rival.silencioApuestasHasta && Date.now() < rival.silencioApuestasHasta.getTime()) {
+        return { ok: false, motivo: 'rival_silenciado_oogie', expira: rival.silencioApuestasHasta };
+    }
+
     monto = Math.trunc(Number(monto));
 
     if (isNaN(monto) || monto < config.APUESTAS.MINIMA) {

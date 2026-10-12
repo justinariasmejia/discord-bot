@@ -12,6 +12,7 @@ const usuarioSchema = new Schema(
         ultimaLimosna: { type: Date, default: null },
         ultimoRobo: { type: Date, default: null },
         bloqueoApuestasHasta: { type: Date, default: null },
+        silencioApuestasHasta: { type: Date, default: null },
         rachaApuestas: { type: Number, default: 0 },
         ultimoTiroApuesta: { type: Date, default: null },
         inventario: [{ _id: false, itemId: String, cantidad: { type: Number, default: 0 } }],

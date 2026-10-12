@@ -311,5 +311,218 @@ module.exports = {
             programarBorradoEvento(cl, targetCanalId, targetMsgId, interaction);
             return;
         }
+
+        // ── 5. Desafío de Oogie Boogie (El Estafador de la Cripta) ──
+        if (accion === 'oogie') {
+            const subAccion = extra;
+            const ev = await EventoAleatorio.findById(eventoId);
+
+            if (!ev || ev.tipo !== 'oogie_boogie') {
+                return safeReply(interaction, {
+                    content: '❌ Este encuentro con Oogie Boogie ya no está disponible.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            if (ev.reclamado || new Date() > ev.expiraEn) {
+                return safeReply(interaction, {
+                    content: '⏳ El tiempo para responder a Oogie Boogie se ha agotado.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            const victima = ev.datos?.victimas?.find(v => v.userId === userId);
+            if (!victima) {
+                return safeReply(interaction, {
+                    content: '👁️ Oogie Boogie no te está mirando a ti... Solo los cazadores señalados en el desafío pueden responder.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            if (victima.estado !== 'pendiente') {
+                return safeReply(interaction, {
+                    content: '⚖️ Ya has tomado tu decisión frente a Oogie Boogie para este encuentro.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            const configGlobal = require('../data/config');
+            const oogieCfg = configGlobal.OOGIE_BOOGIE || {};
+
+            // ── A. Huir Cobardemente ──
+            if (subAccion === 'huir') {
+                await safeDeferUpdate(interaction);
+
+                const usuario = await obtenerUsuario(userId, guildId);
+                const saldoActual = usuario?.huesos || 0;
+                const penalizacion = Math.max(10, Math.floor(saldoActual * (oogieCfg.PENALIZACION_HUIR_PCT || 0.08)));
+
+                if (penalizacion > 0) {
+                    await modificarHuesos(userId, guildId, -penalizacion, 'oogie_huida', 'Huida cobarde de Oogie Boogie');
+                }
+
+                const silencioHasta = new Date(Date.now() + (oogieCfg.SILENCIO_HUIR_MS || 30 * 60 * 1000));
+                await Usuario.updateOne({ userId, guildId }, { $set: { silencioApuestasHasta: silencioHasta } });
+
+                victima.estado = 'huido';
+                victima.penalizacion = penalizacion;
+                ev.datos.respondidos = (ev.datos.respondidos || 0) + 1;
+
+                if (ev.datos.respondidos >= ev.datos.totalVictimas) {
+                    ev.reclamado = true;
+                }
+                ev.markModified('datos');
+                await ev.save();
+
+                logEvento(guildId, '🏃 Huida de Oogie Boogie', `Huyó de Oogie Boogie perdiendo huesos y silenciado 30m.`, userId, -penalizacion).catch(() => null);
+                solicitarActualizacionCripta(guildId);
+
+                const usuarioFinal = await obtenerUsuario(userId, guildId);
+                const embedHuida = basePremium(
+                    '🏃 ¡COBARDÍA FRENTE A OOGIE BOOGIE!',
+                    `¡<@${userId}> huyó despavorido ante la siniestra presencia del Rey del Miedo!\n\n` +
+                    `💸 **Impuesto de cobardía (8%):** **-${formatoNum(penalizacion)}** huesos 🦴\n` +
+                    `🤐 **Penalización extra:** Mesas de apuestas y duelos selladas por **30 minutos**.\n` +
+                    `💰 **Saldo restante:** **${formatoNum(usuarioFinal.huesos)}** huesos 🦴\n\n` +
+                    `*"¡¡Jujajuajuajua!! ¡Corre con tus huesitos, rata asustada! Mis bichos siempre cobran el peaje."*`,
+                    COLORES.rojo
+                );
+
+                const targetCanal = interaction.channel;
+                const msgRes = await targetCanal.send({ embeds: [embedHuida] }).catch(() => null);
+                if (msgRes) {
+                    setTimeout(() => {
+                        msgRes.delete().catch(() => null);
+                    }, TIEMPO_VISIBILIDAD_MENSAJE_MS);
+                }
+
+                // Si todos respondieron, retirar botones del mensaje original
+                if (ev.reclamado) {
+                    await interaction.message?.edit({ components: [] }).catch(() => null);
+                }
+                return;
+            }
+
+            // ── B. Aceptar el Desafío (Mini-juego Tramposo) ──
+            if (subAccion === 'aceptar') {
+                await safeDeferUpdate(interaction);
+
+                const usuario = await obtenerUsuario(userId, guildId);
+                const saldoActual = usuario?.huesos || 0;
+
+                // Recalcular la apuesta exacta según saldo actual si varió
+                let montoApuesta = Math.max(10, Math.floor(saldoActual * (oogieCfg.PORCENTAJE_APUESTA || 0.18)));
+                if (saldoActual < montoApuesta) montoApuesta = saldoActual;
+
+                if (montoApuesta < 10) {
+                    return safeReply(interaction, {
+                        content: '❌ No tienes suficientes huesos para sostener la apuesta con Oogie Boogie.',
+                        flags: MessageFlags.Ephemeral,
+                    });
+                }
+
+                // Descontar la apuesta de inmediato
+                await modificarHuesos(userId, guildId, -montoApuesta, 'oogie_apuesta', 'Apuesta obligatoria contra Oogie Boogie');
+
+                // Elegir uno de los 3 juegos trucados de Oogie
+                const tipoJuegoIndex = Math.floor(Math.random() * 3); // 0: Dados, 1: Carta, 2: Ruleta
+                let gano = false;
+                let detalleJuego = '';
+
+                if (tipoJuegoIndex === 0) {
+                    // 1. Dados Cargados de Oogie (Oogie tira primero entre 9 y 12)
+                    const tiroOogie = Math.floor(Math.random() * 4) + 9;
+                    const d1 = Math.floor(Math.random() * 6) + 1;
+                    const d2 = Math.floor(Math.random() * 6) + 1;
+                    const tiroJugador = d1 + d2;
+                    gano = tiroJugador > tiroOogie;
+
+                    detalleJuego = `🎲 **Mini-juego:** Dados Cargados\n` +
+                        `• **Tiro tramposo de Oogie Boogie:** **${tiroOogie}** 🎲\n` +
+                        `• **Tu tirada de dados limpios:** **${tiroJugador}** 🎲 (Dados: [${d1}] [${d2}])\n\n`;
+                } else if (tipoJuegoIndex === 1) {
+                    // 2. Carta Maldita (1 entre 5 = 20% éxito)
+                    gano = Math.random() < 0.20;
+                    const cartaElegida = gano ? '🎃 Calabaza Dorada' : '💀 Calavera Podrida';
+
+                    detalleJuego = `🃏 **Mini-juego:** Carta Maldita de Oogie\n` +
+                        `• Has levantado una de las 5 cartas de la mesa...\n` +
+                        `• **Carta revelada:** **${cartaElegida}**\n\n`;
+                } else {
+                    // 3. Ruleta de Gusanos (2 casillas entre 10 = 20% éxito)
+                    gano = Math.random() < 0.20;
+                    detalleJuego = `🎯 **Mini-juego:** Ruleta de Gusanos\n` +
+                        `• La aguja de hueso gira descontrolada por la ruleta podrida...\n` +
+                        `• **Casilla resultante:** ${gano ? '✨ ¡Cráneo Dorado del Cazador! ✨' : '🪲 ¡Escarabajo Devorador de Oogie! 🪲'}\n\n`;
+                }
+
+                victima.estado = 'aceptado';
+                victima.montoApuesta = montoApuesta;
+                victima.gano = gano;
+                ev.datos.respondidos = (ev.datos.respondidos || 0) + 1;
+
+                if (ev.datos.respondidos >= ev.datos.totalVictimas) {
+                    ev.reclamado = true;
+                }
+                ev.markModified('datos');
+                await ev.save();
+
+                let embedResultado;
+
+                if (gano) {
+                    // Ganó al tramposo: recupera apuesta + multiplicador neto (ej. +45%)
+                    const mult = oogieCfg.MULTIPLICADOR_GANANCIA || 1.45;
+                    const pagoTotal = Math.floor(montoApuesta * mult);
+                    const gananciaNeta = pagoTotal - montoApuesta;
+
+                    await modificarHuesos(userId, guildId, pagoTotal, 'oogie_victoria', 'Victoria épica contra Oogie Boogie');
+                    const uFinal = await obtenerUsuario(userId, guildId);
+
+                    logEvento(guildId, '🎉 Victoria Épica vs Oogie Boogie', `Derrotó a las trampas de Oogie Boogie.`, userId, gananciaNeta).catch(() => null);
+                    solicitarActualizacionCripta(guildId);
+
+                    embedResultado = basePremium(
+                        '🎉 ¡VICTORIA ÉPICA FRENTE A OOGIE BOOGIE!',
+                        `¡<@${userId}> ha desafiado las probabilidades y **derrotó a Oogie Boogie en su propio juego**!\n\n` +
+                        detalleJuego +
+                        `💰 **Apuesta arriesgada:** **${formatoNum(montoApuesta)}** huesos 🦴\n` +
+                        `✨ **Ganancia neta (+45%):** **+${formatoNum(gananciaNeta)}** huesos 🦴\n` +
+                        `🦴 **Total recuperado y cobrado:** **${formatoNum(pagoTotal)}** huesos\n` +
+                        `💎 **Saldo actual de <@${userId}>:** **${formatoNum(uFinal.huesos)}** huesos 🦴\n\n` +
+                        `*"¡¡ARGHHHH!! ¡Mis dados! ¡Mis preciosos dados trucados! ¡Maldito seas, cazador astuto! ¡¡ESTO NO SE QUEDARÁ ASÍ!!"*`,
+                        COLORES.verde
+                    );
+                } else {
+                    // Perdió contra Oogie
+                    const uFinal = await obtenerUsuario(userId, guildId);
+                    logEvento(guildId, '💀 Derrota vs Oogie Boogie', `Perdió apuesta obligatoria frente a Oogie Boogie.`, userId, -montoApuesta).catch(() => null);
+                    solicitarActualizacionCripta(guildId);
+
+                    embedResultado = basePremium(
+                        '💀 ¡OOGIE BOOGIE SE QUEDÓ CON TUS HUESOS!',
+                        `Las trampas del Rey de los Bichos fueron infalibles. <@${userId}> no pudo contra el juego sucio de Oogie.\n\n` +
+                        detalleJuego +
+                        `💸 **Huesos devorados (18%):** **-${formatoNum(montoApuesta)}** huesos 🦴\n` +
+                        `💰 **Saldo restante de <@${userId}>:** **${formatoNum(uFinal.huesos)}** huesos 🦴\n\n` +
+                        `*"¡¡Jujajuajuajua!! ¡¡Nadie le gana al Rey de Halloween en SU propia mesa!! ¡Gusanos, dense un festín con estos huesos calientitos!"*`,
+                        COLORES.rojo
+                    );
+                }
+
+                const targetCanal = interaction.channel;
+                const msgRes = await targetCanal.send({ embeds: [embedResultado] }).catch(() => null);
+                if (msgRes) {
+                    setTimeout(() => {
+                        msgRes.delete().catch(() => null);
+                    }, TIEMPO_VISIBILIDAD_MENSAJE_MS);
+                }
+
+                // Si todas las víctimas respondieron, desactivar botones
+                if (ev.reclamado) {
+                    await interaction.message?.edit({ components: [] }).catch(() => null);
+                }
+                return;
+            }
+        }
     },
 };

@@ -16,6 +16,7 @@ const {
     apostarTragamonedas,
     validarApuesta,
     consultarCooldown,
+    sincronizarYConsultarCooldown,
 } = require('../services/apuestas');
 const {
     panelAnimacionApuesta,
@@ -64,7 +65,15 @@ async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
         let aviso = '';
         const segs = Math.ceil(cdPrev.restanteMs / 1000);
 
-        if (cdPrev.esBloqueoHoras || cdPrev.restanteMs >= 3600000) {
+        if (cdPrev.esSilencioOogie) {
+            const unixDesbloqueo = Math.floor((Date.now() + cdPrev.restanteMs) / 1000);
+            aviso = `🐛 **¡SILENCIADO POR OOGIE BOOGIE!**\n\n` +
+                `> *El Rey de los Bichos ha maldecido tus dados y cerrado tus bolsillos por cobardía o insolencia.*\n\n` +
+                `Un enjambre de cucarachas bloquea las mesas de apuestas y no te permitirá jugar.\n\n` +
+                `⏳ **La maldición se disipará:** <t:${unixDesbloqueo}:R> *(en aproximadamente ${Math.ceil(cdPrev.restanteMs / 60000)} minutos)*.`;
+            const embedCd = base('🎲 Maldición de Oogie Boogie', aviso, COLORES.rojo);
+            return responderInicial(interaction, { embeds: [embedCd], components: [filaVolver(duenoId)] });
+        } else if (cdPrev.esBloqueoHoras || cdPrev.restanteMs >= 3600000) {
             const unixDesbloqueo = Math.floor((Date.now() + cdPrev.restanteMs) / 1000);
             aviso = `🛑 **BLOQUEO POR FATIGA DE LA CRIPTA (2 HORAS)**\n\n` +
                 `> *Has alcanzado el límite máximo de **${cdPrev.tirosSeguidos || 15} apuestas continuas**.*\n\n` +
