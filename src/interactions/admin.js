@@ -201,6 +201,84 @@ module.exports = {
             return interaction.editReply({ embeds: [embedExito], components: [] });
         }
 
+        // ── 2.1. Panel de Emergencia: Terminar / Rescatar Ruleta Grupal ──
+        if (accion === 'panel_terminar_ruleta') {
+            const RondaGrupal = require('../models/RondaGrupal');
+            const activas = await RondaGrupal.find({ guildId, estado: 'activa' });
+
+            if (activas.length === 0) {
+                return safeReply(interaction, {
+                    content: 'ℹ️ No hay ninguna ruleta grupal activa en este momento en el servidor.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            const totalPart = activas.reduce((acc, r) => acc + r.participantes.length, 0);
+            const totalPozo = activas.reduce((acc, r) => acc + r.pozo, 0);
+
+            const filaAcciones = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('admin:ruleta_admin_reembolsar:admin')
+                    .setLabel('💸 Cancelar y Reembolsar a Todos')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId('admin:ruleta_admin_sortear:admin')
+                    .setLabel('🎲 Sortear Ganador Ahora Mismo')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId('admin:panel_refresh:admin')
+                    .setLabel('Volver')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+
+            const embedAlerta = basePremium(
+                '🛑 Control de Emergencia de Ruleta Grupal',
+                `Se detectó **${activas.length} ruleta activa** en curso.\n\n` +
+                `• **Participantes actuales:** **${totalPart}** cazadores\n` +
+                `• **Pozo acumulado:** **${formatoNum(totalPozo)}** huesos 🦴\n\n` +
+                `¿Qué acción deseas ejecutar de inmediato?\n` +
+                `• **Cancelar y Reembolsar:** Devuelve íntegramente los huesos a todos y borra el mensaje.\n` +
+                `• **Sortear Ganador:** Cierra la ruleta de inmediato y elige al ganador al instante.`,
+                COLORES.rojo
+            );
+
+            return safeReply(interaction, {
+                embeds: [embedAlerta],
+                components: [filaAcciones],
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
+        if (accion === 'ruleta_admin_reembolsar') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const { forzarCierreRuleta } = require('../services/ruletaGrupal');
+            const res = await forzarCierreRuleta(guildId, 'reembolsar', interaction.client);
+
+            await logAdmin(guildId, interaction.user.id, 'Rescate Ruleta: Reembolso', `Ruletas canceladas: ${res.total || 0}`);
+            solicitarActualizacionCripta(guildId);
+            solicitarActualizacionAdminPanel(guildId);
+
+            return interaction.editReply({
+                embeds: [basePremium('✅ Ruleta Cancelada y Reembolsada', `Se han reembolsado todos los tickets a los cazadores y el canal de la Cripta quedó completamente liberado.`, COLORES.verde)],
+                components: [],
+            });
+        }
+
+        if (accion === 'ruleta_admin_sortear') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const { forzarCierreRuleta } = require('../services/ruletaGrupal');
+            const res = await forzarCierreRuleta(guildId, 'sortear', interaction.client);
+
+            await logAdmin(guildId, interaction.user.id, 'Rescate Ruleta: Sorteo Forzado', `Ruletas resueltas: ${res.total || 0}`);
+            solicitarActualizacionCripta(guildId);
+            solicitarActualizacionAdminPanel(guildId);
+
+            return interaction.editReply({
+                embeds: [basePremium('🎲 Sorteo Forzado Ejecutado', `Se ha forzado el cierre y resolución inmediata de la ruleta. El ganador ha recibido su premio en el canal.`, COLORES.verde)],
+                components: [],
+            });
+        }
+
         // ── 3. Refrescar Panel de Admin ──
         if (accion === 'panel_refresh') {
             await safeDeferUpdate(interaction);

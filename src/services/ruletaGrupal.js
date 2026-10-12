@@ -554,6 +554,53 @@ async function recuperarRondasPendientes(client) {
     await tickServicioRuletas(client);
 }
 
+// ── FUNCIÓN DE RESCATE ADMINISTRATIVO ──
+// Permite al staff cancelar y reembolsar o forzar la resolución de cualquier ruleta atascada
+async function forzarCierreRuleta(guildId, tipoAccion = 'reembolsar', client = null) {
+    const rondas = await RondaGrupal.find({ guildId, estado: 'activa' });
+    if (rondas.length === 0) {
+        estadosRuleta.clear();
+        return { ok: false, motivo: 'no_hay_rondas' };
+    }
+
+    const resultados = [];
+
+    for (const ronda of rondas) {
+        const canal = client ? (client.channels.cache.get(ronda.canalId) || await client.channels.fetch(ronda.canalId).catch(() => null)) : null;
+
+        if (tipoAccion === 'reembolsar') {
+            for (const p of ronda.participantes) {
+                await modificarHuesos(
+                    p.userId,
+                    guildId,
+                    p.monto,
+                    'reembolso',
+                    'Reembolso administrativo de ruleta forzada a cerrar'
+                );
+            }
+            ronda.estado = 'cancelada';
+            ronda.fase = 'cancelada';
+            await ronda.save();
+
+            if (canal && ronda.mensajeId) {
+                const msg = await canal.messages.fetch(ronda.mensajeId).catch(() => null);
+                if (msg) {
+                    desprotegerMensajeCripta(msg.id);
+                    await msg.delete().catch(() => null);
+                }
+            }
+            estadosRuleta.delete(ronda.canalId);
+            resultados.push({ rondaId: ronda._id, accion: 'reembolsada', participantes: ronda.participantes.length });
+        } else if (tipoAccion === 'sortear') {
+            await resolverRondaGrupal(ronda._id, canal);
+            estadosRuleta.delete(ronda.canalId);
+            resultados.push({ rondaId: ronda._id, accion: 'sorteada', participantes: ronda.participantes.length });
+        }
+    }
+
+    return { ok: true, total: rondas.length, detalles: resultados };
+}
+
 module.exports = {
     iniciarRondaGrupal,
     unirseRondaGrupal,
@@ -561,5 +608,6 @@ module.exports = {
     consultarCooldownRuleta,
     iniciarServicioRuletaGrupal,
     recuperarRondasPendientes,
+    forzarCierreRuleta,
     reembolsarRondasPendientes: recuperarRondasPendientes,
 };

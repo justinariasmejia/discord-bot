@@ -134,13 +134,18 @@ async function construirPanelAdmin(guildId) {
             .setStyle(ButtonStyle.Secondary)
     );
 
-    // Fila 3: Respaldos, Reseteo y Utilidades
+    // Fila 3: Respaldos, Reseteo, Control de Ruleta y Utilidades
     const fila3 = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('admin:panel_backup:admin')
             .setLabel('Crear Backup')
             .setEmoji('💾')
             .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId('admin:panel_terminar_ruleta:admin')
+            .setLabel('Terminar Ruleta')
+            .setEmoji('🛑')
+            .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
             .setCustomId('admin:panel_reset:admin')
             .setLabel('Resetear Evento')

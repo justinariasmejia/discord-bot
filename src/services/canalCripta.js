@@ -381,4 +381,6 @@ module.exports = {
     solicitarActualizacionCripta,
     protegerCanalSoloLectura,
     sincronizarPermisosCanalesFijos,
+    protegerMensajeCripta,
+    desprotegerMensajeCripta,
 };
