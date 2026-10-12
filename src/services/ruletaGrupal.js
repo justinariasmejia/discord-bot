@@ -54,7 +54,7 @@ function embedRondaActiva(ronda, segundosRestantes) {
     let desc = `🎡 **¡Ruleta Comunitaria de la Cripta en Vivo!**\n` +
         `> *Coloca tus huesos en el pozo antes de que termine el tiempo. ¡Uno de los cazadores se lo llevará todo!*\n\n` +
         `💰 **Pozo Acumulado:** **${formatoNum(ronda.pozo)}** 🦴\n` +
-        `⏳ **Tiempo para participar:** `${segundosRestantes}s`\n\n` +
+        `⏳ **Tiempo para participar:** \`${segundosRestantes}s\`\n\n` +
         `👥 **Cazadores en la Ronda (${ronda.participantes.length}):**\n`;
 
     if (ronda.participantes.length === 0) {
