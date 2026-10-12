@@ -1,4 +1,4 @@
-﻿// src/models/RondaGrupal.js
+// src/models/RondaGrupal.js
 const { Schema, model } = require('mongoose');
 
 const rondaGrupalSchema = new Schema(
@@ -10,6 +10,12 @@ const rondaGrupalSchema = new Schema(
             type: String,
             enum: ['activa', 'finalizada', 'cancelada'],
             default: 'activa',
+            index: true,
+        },
+        fase: {
+            type: String,
+            enum: ['inscripcion', 'girando', 'finalizada', 'cancelada'],
+            default: 'inscripcion',
             index: true,
         },
         pozo: { type: Number, default: 0 },
@@ -26,11 +32,14 @@ const rondaGrupalSchema = new Schema(
         ],
         ganadorId: { type: String, default: null },
         premioEntregado: { type: Number, default: 0 },
+        expiraInscripcion: { type: Date, required: true },
+        expiraGiro: { type: Date, required: true },
         expiraEn: { type: Date, required: true },
     },
     { timestamps: true }
 );
 
 rondaGrupalSchema.index({ canalId: 1, estado: 1 });
+rondaGrupalSchema.index({ estado: 1, fase: 1 });
 
 module.exports = model('RondaGrupal', rondaGrupalSchema);

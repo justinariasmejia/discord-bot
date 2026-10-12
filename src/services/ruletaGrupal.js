@@ -1,10 +1,9 @@
 // src/services/ruletaGrupal.js
-// Gestión de la Ruleta Grupal pública en canales de texto.
-// - Precio de entrada fijo por ticket (definido al crear la ronda).
-// - Animación giratoria visual con frames dinámicos.
-// - Cuenta regresiva en tiempo real con marcas de tiempo nativas de Discord (<t:unix:R>).
-// - Actualización inmediata del pozo y participantes ante cada ingreso.
-// - 1 minuto de participación, 1 minuto de visualización del ganador y cooldown.
+// Sistema de Ruleta Grupal Comunitaria en Dos Fases:
+// • FASE 1 (1 minuto / 60s): Inscripciones abiertas con botón [🎟️ Unirme (X 🦴)]. Pozo en tiempo real.
+// • FASE 2 (1 minuto / 60s): Inscripciones cerradas, botón deshabilitado, la ruleta gira en suspenso.
+// • FASE 3: Se revela el ganador, visible 1 minuto antes de auto-eliminarse.
+// • Cooldown de 60s para abrir otra ronda.
 const RondaGrupal = require('../models/RondaGrupal');
 const Usuario = require('../models/Usuario');
 const { modificarHuesos, obtenerUsuario } = require('./economia');
@@ -16,8 +15,8 @@ const { protegerMensajeCripta, desprotegerMensajeCripta } = require('./canalCrip
 const { logRuletaGrupal } = require('./logger');
 const config = require('../data/config');
 
-const rondasEnMemoria = new Map(); // canalId -> intervalId
-const estadosRuleta = new Map();   // canalId -> { fase, finVisible, cooldownHasta, mensajeId, frameIdx }
+const estadosRuleta = new Map(); // canalId -> { fase, finVisible, cooldownHasta, mensajeId, frameIdx, ultimaEdicion }
+let _tickerId = null;
 
 const FRAMES_ANIMACION = [
     '🎡 ⟪ 🎃 ➔ 👻 ➔ 💀 ➔ 🦴 ➔ 🕷️ ⟫',
@@ -39,7 +38,7 @@ function consultarCooldownRuleta(canalId) {
     const estadoCanal = estadosRuleta.get(canalId);
     if (!estadoCanal) return { bloqueado: false };
 
-    if (estadoCanal.fase === 'activa') {
+    if (estadoCanal.fase === 'inscripcion' || estadoCanal.fase === 'girando') {
         return { bloqueado: true, motivo: 'ya_activa' };
     }
     if (estadoCanal.fase === 'mostrando_resultado') {
@@ -53,30 +52,7 @@ function consultarCooldownRuleta(canalId) {
     return { bloqueado: false };
 }
 
-async function reembolsarRondasPendientes() {
-    try {
-        const activas = await RondaGrupal.find({ estado: 'activa' });
-        for (const ronda of activas) {
-            for (const p of ronda.participantes) {
-                await modificarHuesos(
-                    p.userId,
-                    ronda.guildId,
-                    p.monto,
-                    'reembolso',
-                    'Reembolso por reinicio del bot (Ruleta Grupal)'
-                );
-            }
-            ronda.estado = 'cancelada';
-            await ronda.save();
-        }
-        if (activas.length > 0) {
-            console.log(`🔄 Reembolsadas ${activas.length} ruletas grupales pendientes tras reinicio.`);
-        }
-    } catch (err) {
-        console.error('Error reembolsando ruletas grupales pendientes:', err);
-    }
-}
-
+// ── Botones de Estado ──
 function filaBotonUnirse(rondaId, precio = 50, deshabilitado = false) {
     const btn = new ButtonBuilder()
         .setCustomId(`ruleta_grupal:unirse:publico:${rondaId}`)
@@ -86,20 +62,30 @@ function filaBotonUnirse(rondaId, precio = 50, deshabilitado = false) {
     return new ActionRowBuilder().addComponents(btn);
 }
 
-function embedRondaActiva(ronda, segundosRestantes, frameIdx = 0) {
+function filaBotonCerrado() {
+    const btn = new ButtonBuilder()
+        .setCustomId('ruleta_grupal:cerrada:publico:noop')
+        .setLabel('🛑 Inscripciones Cerradas • Ruleta Girando')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true);
+    return new ActionRowBuilder().addComponents(btn);
+}
+
+// ── Embed Fase 1: Inscripciones Abiertas (1 minuto) ──
+function embedRondaInscripcion(ronda, segundosRestantes, frameIdx = 0) {
     const frame = FRAMES_ANIMACION[frameIdx % FRAMES_ANIMACION.length];
-    const totalSegs = config.APUESTAS?.RULETA_GRUPAL?.DURACION_SEGUNDOS || 60;
+    const totalSegs = 60;
     const barra = barraProgreso(segundosRestantes, totalSegs);
-    const unixCierre = Math.floor(ronda.expiraEn.getTime() / 1000);
+    const unixCierre = Math.floor(ronda.expiraInscripcion.getTime() / 1000);
     const precio = ronda.precioEntrada || 50;
     const corte = Math.round(ronda.pozo * 0.05);
     const premioEstimado = Math.max(0, ronda.pozo - corte);
 
-    let desc = `### ${frame} ⚡ ¡EN VIVO!\n` +
-        `> *¡Ruleta Comunitaria Activa! Compra tu ticket de precio fijo con el botón de abajo. Todos los participantes tienen exactamente la misma probabilidad de llevarse el pozo entero.*\n\n` +
-        `💰 **Pozo Acumulado:** **${formatoNum(ronda.pozo)}** 🦴 *(Premio neto estimado: ~**${formatoNum(premioEstimado)}** 🦴)*\n` +
+    let desc = `### ${frame} 🎟️ ¡FASE 1: INSCRIPCIONES ABIERTAS!\n` +
+        `> *¡Tienes exactamente 1 minuto para participar! Presiona el botón verde de abajo para comprar tu ticket. Al terminar el tiempo, se cerrarán las entradas y nadie más podrá entrar.*\n\n` +
+        `💰 **Pozo Acumulado:** **${formatoNum(ronda.pozo)}** 🦴 *(Neto ganador: ~**${formatoNum(premioEstimado)}** 🦴)*\n` +
         `🎟️ **Precio Fijo por Ticket:** **${formatoNum(precio)}** 🦴 *(1 entrada por cazador)*\n` +
-        `⏳ **Cierre:** <t:${unixCierre}:R> • \`${segundosRestantes}s\` ${barra}\n\n` +
+        `⏳ **Cierre de Inscripciones:** <t:${unixCierre}:R> • \`${segundosRestantes}s\` ${barra}\n\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
         `👥 **Cazadores en la Ronda (${ronda.participantes.length}):**\n`;
 
@@ -113,11 +99,42 @@ function embedRondaActiva(ronda, segundosRestantes, frameIdx = 0) {
     }
 
     desc += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `💡 *Al llegar a 0s, la ruleta se detendrá y anunciará al ganador aquí mismo durante 1 minuto.*\n`;
+        `⚠️ *Al cerrarse las inscripciones, la ruleta girará durante 1 minuto para decidir la suerte del ganador.*\n`;
 
-    return base('🎡 Ruleta Grupal de Halloween • En Vivo', desc, COLORES.naranja);
+    return base('🎡 Ruleta Grupal • Fase de Inscripción', desc, COLORES.naranja);
 }
 
+// ── Embed Fase 2: Girando y Decidiendo Ganador (1 minuto) ──
+function embedRondaGirando(ronda, segundosRestantes, frameIdx = 0) {
+    const frame = FRAMES_ANIMACION[frameIdx % FRAMES_ANIMACION.length];
+    const totalSegs = 60;
+    const barra = barraProgreso(segundosRestantes, totalSegs);
+    const unixCierre = Math.floor(ronda.expiraGiro.getTime() / 1000);
+    const precio = ronda.precioEntrada || 50;
+    const corte = Math.round(ronda.pozo * 0.05);
+    const premioEstimado = Math.max(0, ronda.pozo - corte);
+
+    let desc = `### ${frame} 🌪️ ¡FASE 2: LA RULETA ESTÁ GIRANDO!\n` +
+        `> *¡Las inscripciones han cerrado definitivamente! Nadie más puede entrar.*\n` +
+        `> *La rueda de ultratumba está girando para decidir al único ganador entre los ${ronda.participantes.length} cazadores.*\n\n` +
+        `💰 **Pozo Final Acumulado:** **${formatoNum(ronda.pozo)}** 🦴 *(Premio ganador: **+${formatoNum(premioEstimado)}** 🦴)*\n` +
+        `🎟️ **Precio por Ticket:** **${formatoNum(precio)}** 🦴\n` +
+        `⏳ **Decidiendo Ganador en:** <t:${unixCierre}:R> • \`${segundosRestantes}s\` ${barra}\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `👥 **Cazadores Participantes (${ronda.participantes.length}):**\n`;
+
+    const prob = ((1 / Math.max(1, ronda.participantes.length)) * 100).toFixed(1);
+    ronda.participantes.forEach((p, i) => {
+        desc += `${i + 1}. <@${p.userId}> — **${formatoNum(p.monto)}** 🦴 (${prob}% chance)\n`;
+    });
+
+    desc += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🔮 *¡La ruleta anunciará al ganador en este mensaje al terminar la cuenta regresiva!*\n`;
+
+    return base('🎡 Ruleta Grupal • ¡Decidiendo Ganador!', desc, COLORES.morado);
+}
+
+// ── Iniciar Ronda Grupal ──
 async function iniciarRondaGrupal(canal, guildId, usuarioIniciador, precioEntrada = 50) {
     const confEvento = await obtenerConfig(guildId);
     if (!eventoActivo(confEvento)) return { ok: false, motivo: 'evento_cerrado' };
@@ -133,7 +150,7 @@ async function iniciarRondaGrupal(canal, guildId, usuarioIniciador, precioEntrad
         return { ok: false, motivo: 'ya_activa' };
     }
 
-    // Cobrar el ticket al creador para que sea el primer participante automático
+    // Cobrar el ticket al creador
     const deducido = await modificarHuesos(
         usuarioIniciador.id,
         guildId,
@@ -145,8 +162,9 @@ async function iniciarRondaGrupal(canal, guildId, usuarioIniciador, precioEntrad
         return { ok: false, motivo: 'saldo_insuficiente' };
     }
 
-    const duracionSegundos = config.APUESTAS?.RULETA_GRUPAL?.DURACION_SEGUNDOS || 60;
-    const expiraEn = new Date(ahora + duracionSegundos * 1000);
+    // Tiempos exactos: 60s inscripción + 60s giro
+    const expiraInscripcion = new Date(ahora + 60 * 1000);
+    const expiraGiro = new Date(ahora + 120 * 1000);
 
     const ronda = await RondaGrupal.create({
         guildId,
@@ -162,11 +180,14 @@ async function iniciarRondaGrupal(canal, guildId, usuarioIniciador, precioEntrad
                 fecha: new Date(),
             },
         ],
-        expiraEn,
+        fase: 'inscripcion',
+        expiraInscripcion,
+        expiraGiro,
+        expiraEn: expiraGiro,
         estado: 'activa',
     });
 
-    const embed = embedRondaActiva(ronda, duracionSegundos, 0);
+    const embed = embedRondaInscripcion(ronda, 60, 0);
     const msg = await canal.send({
         embeds: [embed],
         components: [filaBotonUnirse(ronda._id.toString(), precioEntrada)],
@@ -175,181 +196,34 @@ async function iniciarRondaGrupal(canal, guildId, usuarioIniciador, precioEntrad
     ronda.mensajeId = msg.id;
     await ronda.save();
 
-    // 🛡️ Proteger el mensaje en memoria de canalCripta
     protegerMensajeCripta(msg.id);
 
     estadosRuleta.set(canal.id, {
-        fase: 'activa',
+        fase: 'inscripcion',
         mensajeId: msg.id,
-        finActiva: ahora + duracionSegundos * 1000,
         frameIdx: 0,
+        rondaId: ronda._id.toString(),
     });
 
-    // Loop de animación y cuenta regresiva en vivo cada 4 segundos
-    let restantes = duracionSegundos;
-    let frameIdx = 0;
-    const intervalId = setInterval(async () => {
-        restantes = Math.max(0, Math.ceil((ronda.expiraEn.getTime() - Date.now()) / 1000));
-        frameIdx = (frameIdx + 1) % FRAMES_ANIMACION.length;
-
-        const est = estadosRuleta.get(canal.id);
-        if (est) est.frameIdx = frameIdx;
-
-        if (restantes > 0) {
-            const rActual = await RondaGrupal.findById(ronda._id);
-            if (rActual && rActual.estado === 'activa') {
-                await msg.edit({
-                    embeds: [embedRondaActiva(rActual, restantes, frameIdx)],
-                    components: [filaBotonUnirse(ronda._id.toString(), precioEntrada)],
-                }).catch(() => null);
-            }
-        } else {
-            clearInterval(intervalId);
-            rondasEnMemoria.delete(canal.id);
-            await resolverRondaGrupal(ronda._id, canal);
-        }
-    }, 4000);
-
-    rondasEnMemoria.set(canal.id, intervalId);
     return { ok: true, ronda };
 }
 
-async function resolverRondaGrupal(rondaId, canal) {
-    const ronda = await RondaGrupal.findOneAndUpdate(
-        { _id: rondaId, estado: 'activa' },
-        { estado: 'finalizada' },
-        { new: true }
-    );
-    if (!ronda) return;
-
-    const mensaje = await canal.messages.fetch(ronda.mensajeId).catch(() => null);
-    const duracionVisible = (config.APUESTAS?.RULETA_GRUPAL?.DURACION_RESULTADO_SEGUNDOS || 60) * 1000;
-    const cooldownMs = (config.APUESTAS?.RULETA_GRUPAL?.COOLDOWN_SEGUNDOS || 60) * 1000;
-    const ahora = Date.now();
-
-    // ── Si menos de 2 participantes -> Cancelar y reembolsar ──
-    if (ronda.participantes.length < (config.APUESTAS?.RULETA_GRUPAL?.MINIMO_JUGADORES || 2)) {
-        for (const p of ronda.participantes) {
-            await modificarHuesos(
-                p.userId,
-                ronda.guildId,
-                p.monto,
-                'reembolso',
-                'Ruleta Grupal cancelada (mínimo de jugadores no alcanzado)'
-            );
-        }
-        ronda.estado = 'cancelada';
-        await ronda.save();
-
-        const cancelEmbed = base(
-            '🎡 Ruleta Grupal — Cancelada',
-            'No se unieron suficientes cazadores para girar la ruleta (mínimo 2 participantes).\n' +
-            'Todos los huesos apostados han sido reembolsados íntegramente.\n\n' +
-            '⏱️ _Este mensaje permanecerá visible 1 minuto antes de cerrarse._',
-            COLORES.negro
-        );
-
-        if (mensaje) {
-            await mensaje.edit({ embeds: [cancelEmbed], components: [filaBotonUnirse(rondaId, ronda.precioEntrada, true)] }).catch(() => null);
-        }
-
-        estadosRuleta.set(canal.id, {
-            fase: 'mostrando_resultado',
-            finVisible: ahora + duracionVisible,
-            cooldownHasta: ahora + duracionVisible + cooldownMs,
-            mensajeId: mensaje?.id,
-        });
-
-        setTimeout(async () => {
-            try {
-                if (mensaje) {
-                    desprotegerMensajeCripta(mensaje.id);
-                    await mensaje.delete().catch(() => null);
-                }
-            } catch {}
-            const est = estadosRuleta.get(canal.id);
-            if (est) est.fase = 'cooldown';
-        }, duracionVisible);
-
-        return;
-    }
-
-    // ── Elegir ganador (todos con igual probabilidad 1/N al ser precio fijo) ──
-    const indiceGanador = Math.floor(Math.random() * ronda.participantes.length);
-    const ganador = ronda.participantes[indiceGanador];
-    const totalPozo = ronda.pozo;
-
-    const corteCasa = Math.round(totalPozo * (config.APUESTAS?.RULETA_GRUPAL?.CORTE_CASA || 0.05));
-    const premio = totalPozo - corteCasa;
-
-    await modificarHuesos(ganador.userId, ronda.guildId, premio, 'apuesta', 'Premio Ruleta Grupal');
-    ronda.ganadorId = ganador.userId;
-    ronda.premioEntregado = premio;
-    await ronda.save();
-
-    // Actualizar estadísticas de jugadores
-    for (const p of ronda.participantes) {
-        if (p.userId === ganador.userId) {
-            await Usuario.updateOne(
-                { userId: p.userId, guildId: ronda.guildId },
-                { $inc: { 'estadisticas.apostado': p.monto, 'estadisticas.ganado': premio - p.monto } }
-            );
-        } else {
-            await Usuario.updateOne(
-                { userId: p.userId, guildId: ronda.guildId },
-                { $inc: { 'estadisticas.apostado': p.monto, 'estadisticas.perdido': p.monto } }
-            );
-        }
-    }
-
-    const probGanador = ((1 / ronda.participantes.length) * 100).toFixed(1);
-    const winEmbed = base(
-        '🎉 ¡Tenemos un Ganador en la Ruleta Grupal!',
-        `¡La ruleta se detuvo y la fortuna favoreció a <@${ganador.userId}>!\n\n` +
-        `🏆 **Ganador:** <@${ganador.userId}> (${probGanador}% de probabilidad)\n` +
-        `💰 **Premio entregado (+95%):** **+${formatoNum(premio)}** huesos 🦴\n` +
-        `🎟️ **Pozo Total (${ronda.participantes.length} participantes):** ${formatoNum(totalPozo)} huesos\n` +
-        `🏛️ _Comisión de la Cripta (5%): ${formatoNum(corteCasa)} huesos_\n\n` +
-        `Gracias a todos los valientes que apostaron sus almas y huesos.\n\n` +
-        `⏱️ _Este resultado permanecerá visible durante 1 minuto antes de cerrarse._`,
-        COLORES.verde
-    );
-
-    if (mensaje) {
-        await mensaje.edit({ embeds: [winEmbed], components: [filaBotonUnirse(rondaId, ronda.precioEntrada, true)] }).catch(() => null);
-    }
-
-    // Registrar en logs públicos
-    await logRuletaGrupal(ronda.guildId, ganador.userId, totalPozo, premio, ronda.participantes.length, probGanador).catch(() => {});
-
-    estadosRuleta.set(canal.id, {
-        fase: 'mostrando_resultado',
-        finVisible: ahora + duracionVisible,
-        cooldownHasta: ahora + duracionVisible + cooldownMs,
-        mensajeId: mensaje?.id,
-    });
-
-    setTimeout(async () => {
-        try {
-            if (mensaje) {
-                desprotegerMensajeCripta(mensaje.id);
-                await mensaje.delete().catch(() => null);
-            }
-        } catch {}
-        const est = estadosRuleta.get(canal.id);
-        if (est) est.fase = 'cooldown';
-    }, duracionVisible);
-}
-
-// ── Unirse con Precio Fijo (1 solo clic, actualización inmediata del pozo) ──
+// ── Unirse con Precio Fijo (1 clic, solo durante Fase 1) ──
 async function unirseRondaGrupal(rondaId, userId, guildId, canal = null) {
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const ronda = await RondaGrupal.findOne({ _id: rondaId, estado: 'activa' });
         if (!ronda) return { ok: false, motivo: 'ronda_inactiva' };
 
+        const ahora = Date.now();
+
+        // 🛡️ REGLA ESTRICTA: No se puede entrar si ya terminó el minuto de inscripción
+        if (ronda.fase !== 'inscripcion' || ahora >= ronda.expiraInscripcion.getTime()) {
+            return { ok: false, motivo: 'inscripciones_cerradas' };
+        }
+
         const precio = ronda.precioEntrada || 50;
 
-        // Verificar si ya está participando (1 entrada por persona para igualdad)
+        // 1 ticket por persona para igualdad total
         const yaParticipa = ronda.participantes.some((p) => p.userId === userId);
         if (yaParticipa) {
             return { ok: false, motivo: 'ya_participa', precio };
@@ -360,15 +234,14 @@ async function unirseRondaGrupal(rondaId, userId, guildId, canal = null) {
             return { ok: false, motivo: 'saldo_insuficiente', precio, saldo: usuario.huesos };
         }
 
-        // Deducción atómica
         const deducido = await modificarHuesos(userId, guildId, -precio, 'apuesta', 'Ticket Ruleta Grupal');
         if (!deducido) return { ok: false, motivo: 'saldo_insuficiente' };
 
-        // Registro atómico evitando duplicados
         const actualizada = await RondaGrupal.findOneAndUpdate(
             {
                 _id: rondaId,
                 estado: 'activa',
+                fase: 'inscripcion',
                 'participantes.userId': { $ne: userId },
             },
             {
@@ -379,20 +252,19 @@ async function unirseRondaGrupal(rondaId, userId, guildId, canal = null) {
         );
 
         if (!actualizada) {
-            // Reembolsar si hubo condición de carrera
-            await modificarHuesos(userId, guildId, precio, 'reembolso', 'Reembolso por registro concurrente');
-            return { ok: false, motivo: 'ya_participa', precio };
+            await modificarHuesos(userId, guildId, precio, 'reembolso', 'Reembolso por cierre o duplicado');
+            return { ok: false, motivo: 'inscripciones_cerradas', precio };
         }
 
-        // 🚀 ACTUALIZACIÓN INMEDIATA DEL MENSAJE PÚBLICO (Cero delay para ver el pozo subir)
+        // Actualización inmediata del pozo en el mensaje público
         if (canal && actualizada.mensajeId) {
             const msg = await canal.messages.fetch(actualizada.mensajeId).catch(() => null);
             if (msg) {
                 const est = estadosRuleta.get(canal.id);
                 const frameIdx = est?.frameIdx || 0;
-                const restantes = Math.max(0, Math.ceil((actualizada.expiraEn.getTime() - Date.now()) / 1000));
+                const restantes = Math.max(0, Math.ceil((actualizada.expiraInscripcion.getTime() - Date.now()) / 1000));
                 await msg.edit({
-                    embeds: [embedRondaActiva(actualizada, restantes, frameIdx)],
+                    embeds: [embedRondaInscripcion(actualizada, restantes, frameIdx)],
                     components: [filaBotonUnirse(actualizada._id.toString(), precio)],
                 }).catch(() => null);
             }
@@ -411,10 +283,249 @@ async function unirseRondaGrupal(rondaId, userId, guildId, canal = null) {
     return bloqueo.resultado;
 }
 
+// ── Transición: Cerrar Inscripciones e Iniciar Fase 2 de Giro ──
+async function cerrarInscripcionesEIniciarGiro(ronda, canal) {
+    // Si menos de 2 participantes -> Cancelar y reembolsar
+    if (ronda.participantes.length < (config.APUESTAS?.RULETA_GRUPAL?.MINIMO_JUGADORES || 2)) {
+        for (const p of ronda.participantes) {
+            await modificarHuesos(
+                p.userId,
+                ronda.guildId,
+                p.monto,
+                'reembolso',
+                'Ruleta Grupal cancelada (mínimo de jugadores no alcanzado)'
+            );
+        }
+        ronda.estado = 'cancelada';
+        ronda.fase = 'cancelada';
+        await ronda.save();
+
+        const cancelEmbed = base(
+            '🎡 Ruleta Grupal — Cancelada',
+            'No se unieron suficientes cazadores para girar la ruleta (mínimo 2 participantes).\n' +
+            'Todos los huesos apostados han sido reembolsados íntegramente.\n\n' +
+            '⏱️ _Este mensaje permanecerá visible 1 minuto antes de cerrarse._',
+            COLORES.negro
+        );
+
+        if (canal && ronda.mensajeId) {
+            const msg = await canal.messages.fetch(ronda.mensajeId).catch(() => null);
+            if (msg) {
+                await msg.edit({ embeds: [cancelEmbed], components: [filaBotonCerrado()] }).catch(() => null);
+            }
+        }
+
+        const ahora = Date.now();
+        estadosRuleta.set(ronda.canalId, {
+            fase: 'mostrando_resultado',
+            finVisible: ahora + 60000,
+            cooldownHasta: ahora + 120000,
+            mensajeId: ronda.mensajeId,
+        });
+
+        setTimeout(async () => {
+            try {
+                if (canal && ronda.mensajeId) {
+                    const msg = await canal.messages.fetch(ronda.mensajeId).catch(() => null);
+                    if (msg) {
+                        desprotegerMensajeCripta(msg.id);
+                        await msg.delete().catch(() => null);
+                    }
+                }
+            } catch {}
+            const est = estadosRuleta.get(ronda.canalId);
+            if (est) est.fase = 'cooldown';
+        }, 60000);
+
+        return;
+    }
+
+    // Transición a Fase de Giro
+    ronda.fase = 'girando';
+    await ronda.save();
+
+    const est = estadosRuleta.get(ronda.canalId);
+    if (est) est.fase = 'girando';
+
+    if (canal && ronda.mensajeId) {
+        const msg = await canal.messages.fetch(ronda.mensajeId).catch(() => null);
+        if (msg) {
+            const restantes = Math.max(0, Math.ceil((ronda.expiraGiro.getTime() - Date.now()) / 1000));
+            await msg.edit({
+                embeds: [embedRondaGirando(ronda, restantes, 0)],
+                components: [filaBotonCerrado()],
+            }).catch(() => null);
+        }
+    }
+}
+
+// ── Resolución Final (Fase 3: Ganador) ──
+async function resolverRondaGrupal(rondaId, canal) {
+    const ronda = await RondaGrupal.findOneAndUpdate(
+        { _id: rondaId, estado: 'activa' },
+        { estado: 'finalizada', fase: 'finalizada' },
+        { new: true }
+    );
+    if (!ronda) return;
+
+    const mensaje = canal && ronda.mensajeId
+        ? await canal.messages.fetch(ronda.mensajeId).catch(() => null)
+        : null;
+
+    const ahora = Date.now();
+
+    // Elegir ganador con 1/N de probabilidad equitativa
+    const indiceGanador = Math.floor(Math.random() * ronda.participantes.length);
+    const ganador = ronda.participantes[indiceGanador];
+    const totalPozo = ronda.pozo;
+
+    const corteCasa = Math.round(totalPozo * (config.APUESTAS?.RULETA_GRUPAL?.CORTE_CASA || 0.05));
+    const premio = totalPozo - corteCasa;
+
+    await modificarHuesos(ganador.userId, ronda.guildId, premio, 'apuesta', 'Premio Ruleta Grupal');
+    ronda.ganadorId = ganador.userId;
+    ronda.premioEntregado = premio;
+    await ronda.save();
+
+    // Estadísticas
+    for (const p of ronda.participantes) {
+        if (p.userId === ganador.userId) {
+            await Usuario.updateOne(
+                { userId: p.userId, guildId: ronda.guildId },
+                { $inc: { 'estadisticas.apostado': p.monto, 'estadisticas.ganado': premio - p.monto } }
+            );
+        } else {
+            await Usuario.updateOne(
+                { userId: p.userId, guildId: ronda.guildId },
+                { $inc: { 'estadisticas.apostado': p.monto, 'estadisticas.perdido': p.monto } }
+            );
+        }
+    }
+
+    const probGanador = ((1 / ronda.participantes.length) * 100).toFixed(1);
+    const winEmbed = base(
+        '🎉 ¡Tenemos un Ganador en la Ruleta Grupal!',
+        `¡La ruleta se detuvo y favoreció a <@${ganador.userId}>!\n\n` +
+        `🏆 **Ganador:** <@${ganador.userId}> (${probGanador}% de probabilidad)\n` +
+        `💰 **Premio entregado (+95%):** **+${formatoNum(premio)}** huesos 🦴\n` +
+        `🎟️ **Pozo Total (${ronda.participantes.length} participantes):** ${formatoNum(totalPozo)} huesos\n` +
+        `🏛️ _Comisión de la Cripta (5%): ${formatoNum(corteCasa)} huesos_\n\n` +
+        `Gracias a todos los valientes que colocaron su ticket.\n\n` +
+        `⏱️ _Este resultado permanecerá visible durante 1 minuto antes de cerrarse._`,
+        COLORES.verde
+    );
+
+    if (mensaje) {
+        const btnFinal = new ButtonBuilder()
+            .setCustomId('ruleta:fin:noop')
+            .setLabel(`🏆 Ganador: @${ganador.userId.slice(-4)}`)
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(true);
+        await mensaje.edit({ embeds: [winEmbed], components: [new ActionRowBuilder().addComponents(btnFinal)] }).catch(() => null);
+    }
+
+    await logRuletaGrupal(ronda.guildId, ganador.userId, totalPozo, premio, ronda.participantes.length, probGanador).catch(() => {});
+
+    estadosRuleta.set(ronda.canalId, {
+        fase: 'mostrando_resultado',
+        finVisible: ahora + 60000,
+        cooldownHasta: ahora + 120000,
+        mensajeId: ronda.mensajeId,
+    });
+
+    setTimeout(async () => {
+        try {
+            if (canal && ronda.mensajeId) {
+                const msg = await canal.messages.fetch(ronda.mensajeId).catch(() => null);
+                if (msg) {
+                    desprotegerMensajeCripta(msg.id);
+                    await msg.delete().catch(() => null);
+                }
+            }
+        } catch {}
+        const est = estadosRuleta.get(ronda.canalId);
+        if (est) est.fase = 'cooldown';
+    }, 60000);
+}
+
+// ── MOTOR CENTRAL: Ticker de Seguridad Indestructible cada 3 segundos ──
+// Gestiona el paso automático de Fase 1 (Inscripción) -> Fase 2 (Giro) -> Fase 3 (Resultado)
+// sin depender de variables en memoria que puedan morir al reiniciar.
+async function tickServicioRuletas(client) {
+    if (!client) return;
+
+    try {
+        const rondasActivas = await RondaGrupal.find({ estado: 'activa' });
+        const ahora = Date.now();
+
+        for (const ronda of rondasActivas) {
+            const canal = client.channels.cache.get(ronda.canalId) ||
+                await client.channels.fetch(ronda.canalId).catch(() => null);
+
+            if (!canal || !ronda.mensajeId) continue;
+
+            const msg = await canal.messages.fetch(ronda.mensajeId).catch(() => null);
+            if (!msg) continue;
+
+            let est = estadosRuleta.get(ronda.canalId);
+            if (!est) {
+                est = { fase: ronda.fase, frameIdx: 0, mensajeId: ronda.mensajeId };
+                estadosRuleta.set(ronda.canalId, est);
+            }
+
+            est.frameIdx = (est.frameIdx + 1) % FRAMES_ANIMACION.length;
+
+            // ── FASE 1: INSCRIPCIÓN (1 minuto) ──
+            if (ronda.fase === 'inscripcion') {
+                const restantes = Math.ceil((ronda.expiraInscripcion.getTime() - ahora) / 1000);
+
+                if (restantes > 0) {
+                    await msg.edit({
+                        embeds: [embedRondaInscripcion(ronda, restantes, est.frameIdx)],
+                        components: [filaBotonUnirse(ronda._id.toString(), ronda.precioEntrada)],
+                    }).catch(() => null);
+                } else {
+                    // ¡Se acabó el minuto de inscripción! Pasar a Fase 2 (Giro)
+                    await cerrarInscripcionesEIniciarGiro(ronda, canal);
+                }
+            }
+            // ── FASE 2: GIRANDO (1 minuto) ──
+            else if (ronda.fase === 'girando') {
+                const restantesGiro = Math.ceil((ronda.expiraGiro.getTime() - ahora) / 1000);
+
+                if (restantesGiro > 0) {
+                    await msg.edit({
+                        embeds: [embedRondaGirando(ronda, restantesGiro, est.frameIdx)],
+                        components: [filaBotonCerrado()],
+                    }).catch(() => null);
+                } else {
+                    // ¡Se acabó el minuto de giro! Anunciar ganador
+                    await resolverRondaGrupal(ronda._id, canal);
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Error en tickServicioRuletas:', err?.message || err);
+    }
+}
+
+function iniciarServicioRuletaGrupal(client) {
+    if (_tickerId) clearInterval(_tickerId);
+    _tickerId = setInterval(() => tickServicioRuletas(client), 3500);
+    console.log('🎡 Servicio continuo de Ruleta Grupal en Dos Fases iniciado.');
+}
+
+async function recuperarRondasPendientes(client) {
+    iniciarServicioRuletaGrupal(client);
+    await tickServicioRuletas(client);
+}
+
 module.exports = {
     iniciarRondaGrupal,
     unirseRondaGrupal,
-    reembolsarRondasPendientes,
     resolverRondaGrupal,
     consultarCooldownRuleta,
+    iniciarServicioRuletaGrupal,
+    recuperarRondasPendientes,
+    reembolsarRondasPendientes: recuperarRondasPendientes,
 };

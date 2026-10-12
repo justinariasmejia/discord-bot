@@ -1,7 +1,7 @@
 // src/events/ready.js
 // Inicializador de servicios del bot al conectar.
 const { iniciarServicioSalonFama } = require('../services/salonFama');
-const { reembolsarRondasPendientes } = require('../services/ruletaGrupal');
+const { recuperarRondasPendientes } = require('../services/ruletaGrupal');
 const { reembolsarDuelosPendientes } = require('../services/duelos');
 const { iniciarServicioEventosAleatorios, limpiarMensajesExpiradosCanal } = require('../services/eventos-aleatorios');
 const { iniciarServicioCierre } = require('../services/cierre');
@@ -58,7 +58,7 @@ module.exports = {
         iniciarServicioBackups(client);
 
         // Reembolsar apuestas y duelos pendientes tras un reinicio inesperado
-        await reembolsarRondasPendientes();
+        await recuperarRondasPendientes(client);
         await reembolsarDuelosPendientes();
 
         // Inicia el servicio recurrente del Salón de la Fama (Ranking en vivo)
