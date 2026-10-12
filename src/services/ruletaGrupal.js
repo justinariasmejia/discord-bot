@@ -38,17 +38,35 @@ function consultarCooldownRuleta(canalId) {
     const estadoCanal = estadosRuleta.get(canalId);
     if (!estadoCanal) return { bloqueado: false };
 
-    if (estadoCanal.fase === 'inscripcion' || estadoCanal.fase === 'girando') {
-        return { bloqueado: true, motivo: 'ya_activa' };
-    }
+    // Si estaba mostrando resultado pero ya pasó el tiempo visible
     if (estadoCanal.fase === 'mostrando_resultado') {
-        const restanteMs = Math.max(0, (estadoCanal.finVisible || ahora) - ahora);
-        return { bloqueado: true, motivo: 'mostrando_resultado', restanteMs };
+        if (ahora >= (estadoCanal.finVisible || 0)) {
+            estadoCanal.fase = 'cooldown';
+        } else {
+            const restanteMs = Math.max(0, (estadoCanal.finVisible || ahora) - ahora);
+            return { bloqueado: true, motivo: 'mostrando_resultado', restanteMs };
+        }
     }
-    if (estadoCanal.fase === 'cooldown' && estadoCanal.cooldownHasta && ahora < estadoCanal.cooldownHasta) {
+
+    // Si está en cooldown
+    if (estadoCanal.fase === 'cooldown') {
+        if (ahora >= (estadoCanal.cooldownHasta || 0)) {
+            estadosRuleta.delete(canalId);
+            return { bloqueado: false };
+        }
         const restanteMs = estadoCanal.cooldownHasta - ahora;
         return { bloqueado: true, motivo: 'en_cooldown', restanteMs };
     }
+
+    // Si en memoria figuraba activa, verificar si ya expiró el tiempo de giro
+    if (estadoCanal.fase === 'inscripcion' || estadoCanal.fase === 'girando') {
+        if (estadoCanal.finGiro && ahora >= estadoCanal.finGiro) {
+            estadosRuleta.delete(canalId);
+            return { bloqueado: false };
+        }
+        return { bloqueado: true, motivo: 'ya_activa' };
+    }
+
     return { bloqueado: false };
 }
 
@@ -147,7 +165,14 @@ async function iniciarRondaGrupal(canal, guildId, usuarioIniciador, precioEntrad
 
     const existente = await RondaGrupal.findOne({ canalId: canal.id, estado: 'activa' });
     if (existente) {
-        return { ok: false, motivo: 'ya_activa' };
+        const expGiro = existente.expiraGiro || existente.expiraEn || new Date(0);
+        if (ahora >= expGiro.getTime()) {
+            // La ronda anterior ya cumplió todo su tiempo, resolverla de inmediato
+            await resolverRondaGrupal(existente._id, canal);
+            estadosRuleta.delete(canal.id);
+        } else {
+            return { ok: false, motivo: 'ya_activa' };
+        }
     }
 
     // Cobrar el ticket al creador
@@ -203,6 +228,8 @@ async function iniciarRondaGrupal(canal, guildId, usuarioIniciador, precioEntrad
         mensajeId: msg.id,
         frameIdx: 0,
         rondaId: ronda._id.toString(),
+        finInscripcion: expiraInscripcion.getTime(),
+        finGiro: expiraGiro.getTime(),
     });
 
     return { ok: true, ronda };
@@ -475,14 +502,18 @@ async function tickServicioRuletas(client) {
 
             est.frameIdx = (est.frameIdx + 1) % FRAMES_ANIMACION.length;
 
+            const expInsc = ronda.expiraInscripcion || ronda.expiraEn || new Date(0);
+            const expGiro = ronda.expiraGiro || new Date(expInsc.getTime() + 60000);
+            const faseActual = ronda.fase || (ahora >= expInsc.getTime() ? 'girando' : 'inscripcion');
+
             // ── FASE 1: INSCRIPCIÓN (1 minuto) ──
-            if (ronda.fase === 'inscripcion') {
-                const restantes = Math.ceil((ronda.expiraInscripcion.getTime() - ahora) / 1000);
+            if (faseActual === 'inscripcion') {
+                const restantes = Math.ceil((expInsc.getTime() - ahora) / 1000);
 
                 if (restantes > 0) {
                     await msg.edit({
                         embeds: [embedRondaInscripcion(ronda, restantes, est.frameIdx)],
-                        components: [filaBotonUnirse(ronda._id.toString(), ronda.precioEntrada)],
+                        components: [filaBotonUnirse(ronda._id.toString(), ronda.precioEntrada || 50)],
                     }).catch(() => null);
                 } else {
                     // ¡Se acabó el minuto de inscripción! Pasar a Fase 2 (Giro)
@@ -490,8 +521,8 @@ async function tickServicioRuletas(client) {
                 }
             }
             // ── FASE 2: GIRANDO (1 minuto) ──
-            else if (ronda.fase === 'girando') {
-                const restantesGiro = Math.ceil((ronda.expiraGiro.getTime() - ahora) / 1000);
+            else if (faseActual === 'girando') {
+                const restantesGiro = Math.ceil((expGiro.getTime() - ahora) / 1000);
 
                 if (restantesGiro > 0) {
                     await msg.edit({
@@ -502,6 +533,9 @@ async function tickServicioRuletas(client) {
                     // ¡Se acabó el minuto de giro! Anunciar ganador
                     await resolverRondaGrupal(ronda._id, canal);
                 }
+            } else {
+                // Si la ronda ya no está en fase activa, resolverla o finalizarla
+                await resolverRondaGrupal(ronda._id, canal);
             }
         }
     } catch (err) {
