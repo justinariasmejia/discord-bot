@@ -106,10 +106,8 @@ async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
     }
 
     if (tipoJuego === 'ruleta') {
-        await responderInicial(interaction, panelAnimacionApuesta('ruleta'));
-        await new Promise((r) => setTimeout(r, config.APUESTAS.DELAY_ANIMACION_MS || 1500));
         const res = await apostarRuleta(duenoId, interaction.guildId, monto, extra);
-        return interaction.editReply(panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
+        return responderInicial(interaction, panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
     }
 }
 

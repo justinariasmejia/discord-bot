@@ -15,23 +15,8 @@ const { protegerMensajeCripta, desprotegerMensajeCripta } = require('./canalCrip
 const { logRuletaGrupal } = require('./logger');
 const config = require('../data/config');
 
-const estadosRuleta = new Map(); // canalId -> { fase, finVisible, cooldownHasta, mensajeId, frameIdx, ultimaEdicion }
+const estadosRuleta = new Map(); // canalId -> { fase, finVisible, cooldownHasta, mensajeId, finInscripcion, finGiro }
 let _tickerId = null;
-
-const FRAMES_ANIMACION = [
-    '🎡 ⟪ 🎃 ➔ 👻 ➔ 💀 ➔ 🦴 ➔ 🕷️ ⟫',
-    '🎡 ⟪ 🕷️ ➔ 🎃 ➔ 👻 ➔ 💀 ➔ 🦴 ⟫',
-    '🎡 ⟪ 🦴 ➔ 🕷️ ➔ 🎃 ➔ 👻 ➔ 💀 ⟫',
-    '🎡 ⟪ 💀 ➔ 🦴 ➔ 🕷️ ➔ 🎃 ➔ 👻 ⟫',
-    '🎡 ⟪ 👻 ➔ 💀 ➔ 🦴 ➔ 🕷️ ➔ 🎃 ⟫',
-];
-
-function barraProgreso(restantes, total = 60) {
-    const progreso = Math.max(0, Math.min(1, restantes / total));
-    const llenos = Math.round(progreso * 10);
-    const vacios = 10 - llenos;
-    return '`[' + '█'.repeat(llenos) + '░'.repeat(vacios) + ']`';
-}
 
 function consultarCooldownRuleta(canalId) {
     const ahora = Date.now();
@@ -90,20 +75,17 @@ function filaBotonCerrado() {
 }
 
 // ── Embed Fase 1: Inscripciones Abiertas (1 minuto) ──
-function embedRondaInscripcion(ronda, segundosRestantes, frameIdx = 0) {
-    const frame = FRAMES_ANIMACION[frameIdx % FRAMES_ANIMACION.length];
-    const totalSegs = 60;
-    const barra = barraProgreso(segundosRestantes, totalSegs);
+function embedRondaInscripcion(ronda) {
     const unixCierre = Math.floor(ronda.expiraInscripcion.getTime() / 1000);
     const precio = ronda.precioEntrada || 50;
     const corte = Math.round(ronda.pozo * 0.05);
     const premioEstimado = Math.max(0, ronda.pozo - corte);
 
-    let desc = `### ${frame} 🎟️ ¡FASE 1: INSCRIPCIONES ABIERTAS!\n` +
+    let desc = `### 🎟️ ¡FASE 1: INSCRIPCIONES ABIERTAS!\n` +
         `> *¡Tienes exactamente 1 minuto para participar! Presiona el botón verde de abajo para comprar tu ticket. Al terminar el tiempo, se cerrarán las entradas y nadie más podrá entrar.*\n\n` +
         `💰 **Pozo Acumulado:** **${formatoNum(ronda.pozo)}** 🦴 *(Neto ganador: ~**${formatoNum(premioEstimado)}** 🦴)*\n` +
         `🎟️ **Precio Fijo por Ticket:** **${formatoNum(precio)}** 🦴 *(1 entrada por cazador)*\n` +
-        `⏳ **Cierre de Inscripciones:** <t:${unixCierre}:R> • \`${segundosRestantes}s\` ${barra}\n\n` +
+        `⏳ **Cierre de Inscripciones:** <t:${unixCierre}:R>\n\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
         `👥 **Cazadores en la Ronda (${ronda.participantes.length}):**\n`;
 
@@ -123,21 +105,18 @@ function embedRondaInscripcion(ronda, segundosRestantes, frameIdx = 0) {
 }
 
 // ── Embed Fase 2: Girando y Decidiendo Ganador (1 minuto) ──
-function embedRondaGirando(ronda, segundosRestantes, frameIdx = 0) {
-    const frame = FRAMES_ANIMACION[frameIdx % FRAMES_ANIMACION.length];
-    const totalSegs = 60;
-    const barra = barraProgreso(segundosRestantes, totalSegs);
+function embedRondaGirando(ronda) {
     const unixCierre = Math.floor(ronda.expiraGiro.getTime() / 1000);
     const precio = ronda.precioEntrada || 50;
     const corte = Math.round(ronda.pozo * 0.05);
     const premioEstimado = Math.max(0, ronda.pozo - corte);
 
-    let desc = `### ${frame} 🌪️ ¡FASE 2: LA RULETA ESTÁ GIRANDO!\n` +
+    let desc = `### 🌪️ ¡FASE 2: LA RULETA ESTÁ GIRANDO!\n` +
         `> *¡Las inscripciones han cerrado definitivamente! Nadie más puede entrar.*\n` +
         `> *La rueda de ultratumba está girando para decidir al único ganador entre los ${ronda.participantes.length} cazadores.*\n\n` +
         `💰 **Pozo Final Acumulado:** **${formatoNum(ronda.pozo)}** 🦴 *(Premio ganador: **+${formatoNum(premioEstimado)}** 🦴)*\n` +
         `🎟️ **Precio por Ticket:** **${formatoNum(precio)}** 🦴\n` +
-        `⏳ **Decidiendo Ganador en:** <t:${unixCierre}:R> • \`${segundosRestantes}s\` ${barra}\n\n` +
+        `⏳ **Decidiendo Ganador en:** <t:${unixCierre}:R>\n\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
         `👥 **Cazadores Participantes (${ronda.participantes.length}):**\n`;
 
@@ -212,7 +191,7 @@ async function iniciarRondaGrupal(canal, guildId, usuarioIniciador, precioEntrad
         estado: 'activa',
     });
 
-    const embed = embedRondaInscripcion(ronda, 60, 0);
+    const embed = embedRondaInscripcion(ronda);
     const msg = await canal.send({
         embeds: [embed],
         components: [filaBotonUnirse(ronda._id.toString(), precioEntrada)],
@@ -226,7 +205,6 @@ async function iniciarRondaGrupal(canal, guildId, usuarioIniciador, precioEntrad
     estadosRuleta.set(canal.id, {
         fase: 'inscripcion',
         mensajeId: msg.id,
-        frameIdx: 0,
         rondaId: ronda._id.toString(),
         finInscripcion: expiraInscripcion.getTime(),
         finGiro: expiraGiro.getTime(),
@@ -287,11 +265,8 @@ async function unirseRondaGrupal(rondaId, userId, guildId, canal = null) {
         if (canal && actualizada.mensajeId) {
             const msg = await canal.messages.fetch(actualizada.mensajeId).catch(() => null);
             if (msg) {
-                const est = estadosRuleta.get(canal.id);
-                const frameIdx = est?.frameIdx || 0;
-                const restantes = Math.max(0, Math.ceil((actualizada.expiraInscripcion.getTime() - Date.now()) / 1000));
                 await msg.edit({
-                    embeds: [embedRondaInscripcion(actualizada, restantes, frameIdx)],
+                    embeds: [embedRondaInscripcion(actualizada)],
                     components: [filaBotonUnirse(actualizada._id.toString(), precio)],
                 }).catch(() => null);
             }
@@ -377,9 +352,8 @@ async function cerrarInscripcionesEIniciarGiro(ronda, canal) {
     if (canal && ronda.mensajeId) {
         const msg = await canal.messages.fetch(ronda.mensajeId).catch(() => null);
         if (msg) {
-            const restantes = Math.max(0, Math.ceil((ronda.expiraGiro.getTime() - Date.now()) / 1000));
             await msg.edit({
-                embeds: [embedRondaGirando(ronda, restantes, 0)],
+                embeds: [embedRondaGirando(ronda)],
                 components: [filaBotonCerrado()],
             }).catch(() => null);
         }
@@ -475,14 +449,16 @@ async function resolverRondaGrupal(rondaId, canal) {
     }, 60000);
 }
 
-// ── MOTOR CENTRAL: Ticker de Seguridad Indestructible cada 3 segundos ──
-// Gestiona el paso automático de Fase 1 (Inscripción) -> Fase 2 (Giro) -> Fase 3 (Resultado)
-// sin depender de variables en memoria que puedan morir al reiniciar.
+// ── MOTOR CENTRAL: Supervisor de Fases sin animaciones ni saturación de API ──
+// Gestiona el paso automático de Fase 1 (Inscripción) -> Fase 2 (Giro) -> Fase 3 (Resultado).
+// Solo edita el mensaje al cambiar de fase, aprovechando los timestamps relativos nativos de Discord <t:unix:R>.
 async function tickServicioRuletas(client) {
     if (!client) return;
 
     try {
         const rondasActivas = await RondaGrupal.find({ estado: 'activa' });
+        if (rondasActivas.length === 0) return;
+
         const ahora = Date.now();
 
         for (const ronda of rondasActivas) {
@@ -491,50 +467,28 @@ async function tickServicioRuletas(client) {
 
             if (!canal || !ronda.mensajeId) continue;
 
-            const msg = await canal.messages.fetch(ronda.mensajeId).catch(() => null);
-            if (!msg) continue;
-
-            let est = estadosRuleta.get(ronda.canalId);
-            if (!est) {
-                est = { fase: ronda.fase, frameIdx: 0, mensajeId: ronda.mensajeId };
-                estadosRuleta.set(ronda.canalId, est);
-            }
-
-            est.frameIdx = (est.frameIdx + 1) % FRAMES_ANIMACION.length;
-
             const expInsc = ronda.expiraInscripcion || ronda.expiraEn || new Date(0);
             const expGiro = ronda.expiraGiro || new Date(expInsc.getTime() + 60000);
             const faseActual = ronda.fase || (ahora >= expInsc.getTime() ? 'girando' : 'inscripcion');
 
             // ── FASE 1: INSCRIPCIÓN (1 minuto) ──
             if (faseActual === 'inscripcion') {
-                const restantes = Math.ceil((expInsc.getTime() - ahora) / 1000);
-
-                if (restantes > 0) {
-                    await msg.edit({
-                        embeds: [embedRondaInscripcion(ronda, restantes, est.frameIdx)],
-                        components: [filaBotonUnirse(ronda._id.toString(), ronda.precioEntrada || 50)],
-                    }).catch(() => null);
-                } else {
+                if (ahora >= expInsc.getTime()) {
                     // ¡Se acabó el minuto de inscripción! Pasar a Fase 2 (Giro)
                     await cerrarInscripcionesEIniciarGiro(ronda, canal);
                 }
+                // Si aún está dentro del minuto, NO se edita periódicamente.
+                // Discord actualiza nativamente el contador <t:unix:R> en la pantalla de los clientes sin gastar peticiones.
             }
             // ── FASE 2: GIRANDO (1 minuto) ──
             else if (faseActual === 'girando') {
-                const restantesGiro = Math.ceil((expGiro.getTime() - ahora) / 1000);
-
-                if (restantesGiro > 0) {
-                    await msg.edit({
-                        embeds: [embedRondaGirando(ronda, restantesGiro, est.frameIdx)],
-                        components: [filaBotonCerrado()],
-                    }).catch(() => null);
-                } else {
+                if (ahora >= expGiro.getTime()) {
                     // ¡Se acabó el minuto de giro! Anunciar ganador
                     await resolverRondaGrupal(ronda._id, canal);
                 }
+                // Si aún está girando, NO se edita periódicamente.
             } else {
-                // Si la ronda ya no está en fase activa, resolverla o finalizarla
+                // Si la ronda ya no está en fase activa, resolverla
                 await resolverRondaGrupal(ronda._id, canal);
             }
         }
@@ -545,8 +499,8 @@ async function tickServicioRuletas(client) {
 
 function iniciarServicioRuletaGrupal(client) {
     if (_tickerId) clearInterval(_tickerId);
-    _tickerId = setInterval(() => tickServicioRuletas(client), 3500);
-    console.log('🎡 Servicio continuo de Ruleta Grupal en Dos Fases iniciado.');
+    _tickerId = setInterval(() => tickServicioRuletas(client), 3000);
+    console.log('🎡 Supervisor estático de Ruleta Grupal (sin saturación de API) iniciado.');
 }
 
 async function recuperarRondasPendientes(client) {
