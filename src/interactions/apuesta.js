@@ -58,14 +58,34 @@ async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
         });
     }
 
-    // 🛡️ Pre-chequeo de cooldown inteligente antes de iniciar animaciones o consumir API
-    const cdPrev = consultarCooldown(duenoId);
+    // 🛡️ Pre-chequeo de cooldown inteligente con avisos progresivos y bloqueo por fatiga
+    const cdPrev = await sincronizarYConsultarCooldown(duenoId, interaction.guildId);
     if (cdPrev.enCooldown) {
+        let aviso = '';
         const segs = Math.ceil(cdPrev.restanteMs / 1000);
-        const aviso = cdPrev.tirosSeguidos > 3
-            ? `🔥 **Máquina Sobrecalentada:** Llevas **${cdPrev.tirosSeguidos} tiros seguidos**.\n\nDebes esperar **${segs}s** para que los carretes se enfríen y cuidar tus huesos.`
-            : `⏳ **Cooldown Activo:** Debes esperar **${segs}s** antes de tu siguiente jugada.`;
-        const embedCd = base('🎰 Pausa de Enfriamiento', aviso, COLORES.morado);
+
+        if (cdPrev.esBloqueoHoras || cdPrev.restanteMs >= 3600000) {
+            const unixDesbloqueo = Math.floor((Date.now() + cdPrev.restanteMs) / 1000);
+            aviso = `🛑 **BLOQUEO POR FATIGA DE LA CRIPTA (2 HORAS)**\n\n` +
+                `> *Has alcanzado el límite máximo de **${cdPrev.tirosSeguidos || 15} apuestas continuas**.*\n\n` +
+                `Para evitar ludopatía, spam y proteger tus huesos, las mesas de juego se han sellado para ti.\n\n` +
+                `⏳ **Podrás volver a apostar:** <t:${unixDesbloqueo}:R> *(en aproximadamente ${Math.ceil(cdPrev.restanteMs / 3600000)} horas)*.\n\n` +
+                `✨ *¡Aprovecha este tiempo para cazar, participar en duelos o responder las Trivias del Terror!*`;
+        } else if (cdPrev.tirosSeguidos >= 10) {
+            aviso = `🔥 **Máquina Sobrecalentada (${cdPrev.tirosSeguidos} apuestas seguidas)**\n\n` +
+                `Debes esperar **${segs}s** para que los carretes se enfríen.\n\n` +
+                `⚠️ **Alerta Máxima:** Si alcanzas **15 apuestas consecutivas**, la máquina se **bloqueará por 2 horas**.\n` +
+                `💡 *Descansa 15 minutos para reiniciar tu racha a cero.*`;
+        } else if (cdPrev.tirosSeguidos >= 5) {
+            aviso = `⚠️ **Aviso de Fatiga (${cdPrev.tirosSeguidos} apuestas seguidas)**\n\n` +
+                `Estás apostando a un ritmo muy acelerado. Debes esperar **${segs}s** antes de tu siguiente jugada.\n\n` +
+                `💡 *Consejo: Si descansas 15 minutos, tu racha volverá a cero.*`;
+        } else {
+            aviso = `⏳ **Pausa de Enfriamiento:** Debes esperar **${segs}s** antes de tu siguiente apuesta.\n\n` +
+                `🦴 *Un ritmo moderado mantiene la economía equilibrada y protege tus huesos.*`;
+        }
+
+        const embedCd = base('🎰 Pausa de Enfriamiento de Apuestas', aviso, cdPrev.esBloqueoHoras ? COLORES.rojo : COLORES.morado);
         return responderInicial(interaction, { embeds: [embedCd], components: [filaVolver(duenoId)] });
     }
     tiradasEnProgreso.add(duenoId);

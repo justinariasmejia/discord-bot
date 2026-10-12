@@ -315,6 +315,216 @@ const PREGUNTAS_TRIVIA = [
         opciones: ["Belcebú", "Lucifer", "Mammon", "Leviatán"],
         correcta: 0,
         explicacion: "Belcebú (del hebreo Ba'al Zvuv) se traduce literalmente como el Señor de las Moscas."
+    },
+    {
+        id: 46,
+        pregunta: "¿Qué famoso personaje es el 'Rey Calabaza' en la película animada 'El extraño mundo de Jack'?",
+        opciones: ["Oogie Boogie", "Jack Skellington", "Dr. Finkelstein", "Zero"],
+        correcta: 1,
+        explicacion: "Jack Skellington es el entrañable esqueleto y líder de la Ciudad de Halloween en el clásico de Tim Burton."
+    },
+    {
+        id: 47,
+        pregunta: "¿Qué frase tradicional dicen los niños al pedir dulces de puerta en puerta en la noche de Halloween?",
+        opciones: ["¡Paz o Guerra!", "¡Truco o Trato! (Dulce o Truco)", "¡Noche de Brujas!", "¡Ánimas en pena!"],
+        correcta: 1,
+        explicacion: "'Truco o trato' (Trick or treat) es la frase universal donde el 'trato' son golosinas y el 'truco' es una pequeña travesura."
+    },
+    {
+        id: 48,
+        pregunta: "¿Cuáles son los dos colores más icónicos y tradicionales asociados con Halloween?",
+        opciones: ["Rojo y Blanco", "Naranja y Negro", "Verde y Dorado", "Morado y Azul"],
+        correcta: 1,
+        explicacion: "El naranja simboliza la cosecha de otoño y las calabazas, mientras que el negro representa la noche y la muerte."
+    },
+    {
+        id: 49,
+        pregunta: "¿Qué animal negro es considerado tradicionalmente un símbolo de misterio y compañero de las brujas?",
+        opciones: ["El Cuervo", "El Gato Negro", "El Búho", "El Murciélago"],
+        correcta: 1,
+        explicacion: "En la mitología y el folclore, los gatos negros eran considerados 'familiares' o guardianes protectores de las brujas."
+    },
+    {
+        id: 50,
+        pregunta: "¿Qué pregunta icónica le hace el asesino Ghostface a sus víctimas por teléfono en la película 'Scream'?",
+        opciones: ["¿Quién anda ahí?", "¿Cuál es tu película de terror favorita?", "¿Estás sola en casa?", "¿Tienes miedo a la oscuridad?"],
+        correcta: 1,
+        explicacion: "La famosa línea inicial 'What's your favorite scary movie?' se convirtió en el sello inconfundible de la franquicia Scream."
+    },
+    {
+        id: 51,
+        pregunta: "¿Cómo se llama la espeluznante máscara que viste el asesino Jason Voorhees en 'Viernes 13'?",
+        opciones: ["Máscara de gas", "Máscara veneciana", "Máscara de hockey", "Máscara de lucha libre"],
+        correcta: 2,
+        explicacion: "Jason adoptó su legendaria máscara de hockey sobre hielo en 'Viernes 13: Parte III' (1982)."
+    },
+    {
+        id: 52,
+        pregunta: "¿A qué criatura sobrenatural se le teme clavarle una estaca de madera en el corazón?",
+        opciones: ["A la Momia", "Al Hombre Lobo", "Al Vampiro", "Al Zombi"],
+        correcta: 2,
+        explicacion: "Según la tradición europea, la única forma de asegurar el descanso eterno de un vampiro es una estaca de madera en su corazón."
+    },
+    {
+        id: 53,
+        pregunta: "¿Qué flor de color naranja brillante se utiliza tradicionalmente en el Día de Muertos para guiar a las almas?",
+        opciones: ["Cempasúchil", "Rosa de espinas", "Orquídea negra", "Flor de loto"],
+        correcta: 0,
+        explicacion: "El Cempasúchil (flor de veinte pétalos) guía a los difuntos hacia los altares gracias a su intenso aroma y color."
+    },
+    {
+        id: 54,
+        pregunta: "¿Cuántas veces se debe pronunciar su nombre frente al espejo para invocar al travieso bio-exorcista 'Beetlejuice'?",
+        opciones: ["1 vez", "3 veces", "5 veces", "7 veces"],
+        correcta: 1,
+        explicacion: "Decir 'Beetlejuice' tres veces consecutivas rompe la barrera del más allá y lo invoca de inmediato."
+    },
+    {
+        id: 55,
+        pregunta: "¿De qué lago maldito emerge el asesino Jason Voorhees para cazar a sus víctimas en 'Viernes 13'?",
+        opciones: ["Lago Ness", "Crystal Lake (Lago Cristal)", "Lago Sangriento", "Lago Espejo"],
+        correcta: 1,
+        explicacion: "Camp Crystal Lake es el campamento de verano maldito donde Jason supuestamente se ahogó de niño."
+    },
+    {
+        id: 56,
+        pregunta: "¿Cómo se llama la famosa joven poseída en el clásico cinematográfico 'El Exorcista' de 1973?",
+        opciones: ["Carrie White", "Regan MacNeil", "Samara Morgan", "Laurie Strode"],
+        correcta: 1,
+        explicacion: "Regan MacNeil, interpretada por Linda Blair, es poseída por el demonio Pazuzu en la obra maestra de William Friedkin."
+    },
+    {
+        id: 57,
+        pregunta: "¿Cuál de estos alimentos o plantas es el repelente clásico más conocido contra los vampiros?",
+        opciones: ["La cebolla", "El ajo", "La pimienta", "El jengibre"],
+        correcta: 1,
+        explicacion: "Colgar coronas o dientes de ajo en puertas y ventanas es la defensa clásica contra las criaturas chupasangre."
+    },
+    {
+        id: 58,
+        pregunta: "¿Cómo se llama el monstruo gigante hecho de dulce que marcha por Nueva York en 'Los Cazafantasmas' (Ghostbusters)?",
+        opciones: ["Stay Puft (El Hombre de Malvavisco)", "Slimer / Pegajoso", "Gozer", "Zuul"],
+        correcta: 0,
+        explicacion: "El Hombre de Malvavisco Stay Puft es la forma física destructiva que elige Gozer en el clímax de Ghostbusters (1984)."
+    },
+    {
+        id: 59,
+        pregunta: "¿Qué frase célebre grita Jack Torrance (Jack Nicholson) al romper la puerta con un hacha en 'El Resplandor'?",
+        opciones: ["¡Ya estoy aquí!", "¡Aquí está Johnny! (Here's Johnny!)", "¡Sal de donde estés!", "¡Hora de morir!"],
+        correcta: 1,
+        explicacion: "Jack improvisó 'Here's Johnny!' homenajeando el show de Johnny Carson, creando una de las escenas más memorables del cine."
+    },
+    {
+        id: 60,
+        pregunta: "¿Cómo se llama la misteriosa tabla de madera con letras y números que se usa para comunicarse con espíritus?",
+        opciones: ["Tabla Rúnica", "Tabla Ouija", "Tablilla de arcilla", "Péndulo Astral"],
+        correcta: 1,
+        explicacion: "La tabla Ouija utiliza una planchette deslizante sobre un tablero alfabético para deletrear respuestas del más allá."
+    },
+    {
+        id: 61,
+        pregunta: "¿Cuál es el nombre de la siniestra marioneta en triciclo que utiliza Jigsaw en la saga 'Saw'?",
+        opciones: ["Billy", "Slappy", "Annabelle", "Robert"],
+        correcta: 0,
+        explicacion: "Billy the Puppet es el muñeco mecánico que John Kramer (Jigsaw) utiliza para entregar instrucciones a sus víctimas."
+    },
+    {
+        id: 62,
+        pregunta: "¿Qué poder sobrenatural posee la protagonista en la novela y película 'Carrie' de Stephen King?",
+        opciones: ["Invisibilidad", "Telequinesis (mover objetos con la mente)", "Vuelo", "Piroquinesis"],
+        correcta: 1,
+        explicacion: "Carrie White desata sus devastadores poderes telequinéticos durante la trágica noche de su baile de graduación."
+    },
+    {
+        id: 63,
+        pregunta: "¿Qué célebre máscara blanca de Halloween se fabricó originalmente a partir del rostro del actor William Shatner (Capitán Kirk)?",
+        opciones: ["La máscara de Michael Myers", "La máscara de Ghostface", "La máscara de Leatherface", "La máscara de Hannibal Lecter"],
+        correcta: 0,
+        explicacion: "El equipo de John Carpenter compró una máscara económica de William Shatner del Capitán Kirk por 2 dólares y la pintó de blanco."
+    },
+    {
+        id: 64,
+        pregunta: "¿Cómo se llama la hija gótica y seria de la Familia Addams que viste de negro con dos trenzas?",
+        opciones: ["Morticia", "Merlina (Wednesday Addams)", "Enid", "Clarice"],
+        correcta: 1,
+        explicacion: "Merlina Addams (Wednesday en inglés) es la icónica hija de Homero y Morticia, célebre por su humor negro y vestimenta oscura."
+    },
+    {
+        id: 65,
+        pregunta: "¿Qué animal puede transformarse o es comúnmente asociado con la forma animal de Drácula además del lobo?",
+        opciones: ["El murciélago", "La serpiente", "El sapo", "La lechuza"],
+        correcta: 0,
+        explicacion: "El conde Drácula tiene la capacidad de disolverse en niebla o tomar la forma de murciélago y lobo en la oscuridad."
+    },
+    {
+        id: 66,
+        pregunta: "¿En qué país se originó la antigua civilización que momificaba a sus faraones para el viaje al más allá?",
+        opciones: ["Grecia", "Egipto", "Roma", "Persia"],
+        correcta: 1,
+        explicacion: "El Antiguo Egipto desarrolló complejas técnicas de momificación con vendajes de lino para preservar los cuerpos en las tumbas."
+    },
+    {
+        id: 67,
+        pregunta: "¿Qué tipo de luna se asocia legendariamente con la transformación de una persona en Hombre Lobo?",
+        opciones: ["Luna Nueva", "Luna Menguante", "Luna Llena", "Luna Creciente"],
+        correcta: 2,
+        explicacion: "La luz de la luna llena despierta la maldición de la licantropía, obligando al afectado a transformarse en bestia feroz."
+    },
+    {
+        id: 68,
+        pregunta: "¿Cómo se llama el fiel perro fantasma con nariz de calabaza que acompaña a Jack Skellington?",
+        opciones: ["Ghost", "Zero", "Sparky", "Fang"],
+        correcta: 1,
+        explicacion: "Zero es el fiel perro flotante de Jack cuya nariz brilla como una pequeña calabaza de Halloween."
+    },
+    {
+        id: 69,
+        pregunta: "¿Qué famosa leyenda latinoamericana habla de una mujer en pena que vaga llorando por las noches buscando a sus hijos?",
+        opciones: ["La Llorona", "La Sayona", "La Viuda Negra", "La Patasola"],
+        correcta: 0,
+        explicacion: "La Llorona es el alma en pena que grita '¡Ay, mis hijos!' cerca de los ríos y caminos durante las noches oscuras."
+    },
+    {
+        id: 70,
+        pregunta: "¿De qué material estaba hecha la casa de la bruja en el popular cuento clásico de 'Hansel y Gretel'?",
+        opciones: ["De piedras mágicas", "De dulces, pan de jengibre y chocolate", "De madera podrida", "De huesos humanos"],
+        correcta: 1,
+        explicacion: "La bruja del bosque construyó su casa de dulces y golosinas para atraer a niños hambrientos a su trampa."
+    },
+    {
+        id: 71,
+        pregunta: "¿Qué famoso hotel ficticio de Colorado es el escenario embrujado de la película 'El Resplandor'?",
+        opciones: ["Hotel Overlook", "Hotel Bates", "Hotel Transilvania", "Hotel Cecil"],
+        correcta: 0,
+        explicacion: "El Hotel Overlook queda aislado por la nieve en invierno, provocando que los espíritus atrapen y enloquezcan a Jack."
+    },
+    {
+        id: 72,
+        pregunta: "¿Cómo se llama la camioneta psicodélica en la que viajan Scooby-Doo y sus amigos resolviendo misterios paranormales?",
+        opciones: ["La Máquina del Misterio (Mystery Machine)", "El Batimóvil", "La Furgoneta Fantasma", "El Cazador Nocturno"],
+        correcta: 0,
+        explicacion: "La 'Mystery Machine' lleva a Fred, Daphne, Vilma, Shaggy y Scooby a desenmascarar falsos fantasmas y monstruos."
+    },
+    {
+        id: 73,
+        pregunta: "¿Qué estatua monstruosa esculpida en piedra adorna las catedrales góticas para ahuyentar a los malos espíritus?",
+        opciones: ["Gárgola", "Centauro", "Querubín", "Esfinge"],
+        correcta: 0,
+        explicacion: "Las gárgolas servían como desagües arquitectónicos y según la creencia popular ahuyentaban a los demonios y brujas."
+    },
+    {
+        id: 74,
+        pregunta: "¿Qué nombre recibe el científico que creó al famoso monstruo con partes de cadáveres y electricidad en la obra de Mary Shelley?",
+        opciones: ["Dr. Frankenstein (Víctor)", "Dr. Jekyll", "Dr. Van Helsing", "Dr. Moreau"],
+        correcta: 0,
+        explicacion: "Víctor Frankenstein es el científico creador, aunque popularmente la gente llama Frankenstein al propio monstruo."
+    },
+    {
+        id: 75,
+        pregunta: "¿Cómo se llama la niña con cabello largo que sale de un pozo y de la televisión en la película 'El Aro' (The Ring)?",
+        opciones: ["Sadako / Samara Morgan", "Kayako", "Annabelle", "Regan"],
+        correcta: 0,
+        explicacion: "Samara Morgan (o Sadako en la versión original japonesa) persigue a cualquiera que mire su misteriosa cinta de video maldita."
     }
 ];
 

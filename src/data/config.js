@@ -49,8 +49,18 @@ module.exports = {
         MINIMA: 10,
         MAXIMA_ABSOLUTA: 5000,
         MAXIMO_PORCENTAJE: 0.50,      // Máximo el 50% del saldo actual
-        COOLDOWN_MS: 15000,           // 15 segundos base de cooldown inteligente por usuario
+        COOLDOWN_BASE_MS: 25000,      // 25 segundos base para cualquier apuesta individual
+        COOLDOWN_MS: 25000,           // Cooldown inicial general (25s)
         DELAY_ANIMACION_MS: 1100,     // Retardo entre frames de animación de apuestas
+        FATIGA: {
+            NIVEL1_TIROS: 5,           // A partir de 5 tiros seguidos -> 45s cooldown
+            COOLDOWN_NIVEL1_MS: 45000,
+            NIVEL2_TIROS: 10,          // A partir de 10 tiros seguidos -> 90s cooldown
+            COOLDOWN_NIVEL2_MS: 90000,
+            LIMITE_BLOQUEO_TIROS: 15,  // A los 15 tiros seguidos -> Bloqueo obligatorio de 2 horas
+            DURACION_BLOQUEO_MS: 2 * 60 * 60 * 1000, // 2 horas (7200s) de descanso obligatorio
+            TIEMPO_RESET_RACHA_MS: 15 * 60 * 1000,   // 15 minutos sin apostar resetea la racha
+        },
 
         // Cara o Cruz
         CARA_CRUZ: {

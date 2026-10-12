@@ -6,24 +6,29 @@ const { obtenerConfig, eventoActivo } = require('./evento');
 const { conBloqueo } = require('../utils/locks');
 const config = require('../data/config');
 
-// ── Cooldown Inteligente Progresivo (Anti-Spam de Tragamonedas y Casino) ──
-// Registra tiros seguidos para escalar el tiempo de enfriamiento si alguien spamea botones.
-const estadosApuestas = new Map(); // userId -> { ultimoTiro, tirosSeguidos, cooldownActualMs }
-
-function calcularCooldownInteligente(tirosSeguidos, tipoJuego) {
-    const esTraga = tipoJuego === 'tragamonedas';
-    const baseMs = esTraga ? 15000 : 10000; // 15s para tragamonedas, 10s para otros juegos
-
-    if (tirosSeguidos <= 3) return baseMs;                       // Tiros 1 a 3: 15s
-    if (tirosSeguidos <= 6) return esTraga ? 30000 : 20000;       // Tiros 4 a 6: 30s
-    if (tirosSeguidos <= 9) return esTraga ? 60000 : 40000;       // Tiros 7 a 9: 60s
-    return esTraga ? 120000 : 60000;                              // 10+ tiros consecutivos: 120s (2m pausa)
-}
+// ── Cooldown Inteligente Progresivo y Sistema de Fatiga Anti-Spam ──
+// Registra tiros seguidos para escalar el tiempo de enfriamiento:
+// • 1 a 4 tiros: 25 segundos base
+// • 5 a 9 tiros: 45 segundos + aviso de fatiga
+// • 10 a 14 tiros: 90 segundos (1.5m) + alerta de sobrecalentamiento
+// • 15 tiros: BLOQUEO POR FATIGA DE 2 HORAS
+// • 15 minutos sin jugar resetea la racha a cero.
+const estadosApuestas = new Map(); // userId -> { ultimoTiro, tirosSeguidos, cooldownActualMs, bloqueoHasta }
 
 function consultarCooldown(userId) {
     const ahora = Date.now();
     const estado = estadosApuestas.get(userId);
     if (!estado) return { enCooldown: false, tirosSeguidos: 0 };
+
+    // Si tiene un bloqueo mayor por fatiga (2 horas)
+    if (estado.bloqueoHasta && ahora < estado.bloqueoHasta) {
+        return {
+            enCooldown: true,
+            restanteMs: estado.bloqueoHasta - ahora,
+            tirosSeguidos: estado.tirosSeguidos,
+            esBloqueoHoras: true,
+        };
+    }
 
     const tiempoPasado = ahora - estado.ultimoTiro;
     if (tiempoPasado < estado.cooldownActualMs) {
@@ -31,30 +36,82 @@ function consultarCooldown(userId) {
             enCooldown: true,
             restanteMs: estado.cooldownActualMs - tiempoPasado,
             tirosSeguidos: estado.tirosSeguidos,
+            esBloqueoHoras: Boolean(estado.bloqueoHasta && ahora < estado.bloqueoHasta),
         };
     }
+
     return { enCooldown: false, tirosSeguidos: estado.tirosSeguidos };
+}
+
+async function sincronizarYConsultarCooldown(userId, guildId) {
+    const ahora = Date.now();
+    let estado = estadosApuestas.get(userId);
+
+    // Si no está en memoria, consultar la base de datos
+    if (!estado && guildId) {
+        const usuario = await obtenerUsuario(userId, guildId).catch(() => null);
+        if (usuario && usuario.bloqueoApuestasHasta && ahora < usuario.bloqueoApuestasHasta.getTime()) {
+            estado = {
+                ultimoTiro: usuario.ultimoTiroApuesta ? usuario.ultimoTiroApuesta.getTime() : ahora,
+                tirosSeguidos: usuario.rachaApuestas || 15,
+                cooldownActualMs: usuario.bloqueoApuestasHasta.getTime() - ahora,
+                bloqueoHasta: usuario.bloqueoApuestasHasta.getTime(),
+            };
+            estadosApuestas.set(userId, estado);
+            return {
+                enCooldown: true,
+                restanteMs: estado.bloqueoHasta - ahora,
+                tirosSeguidos: estado.tirosSeguidos,
+                esBloqueoHoras: true,
+            };
+        }
+    }
+
+    return consultarCooldown(userId);
 }
 
 function verificarCooldown(userId, tipoJuego = 'general') {
     const ahora = Date.now();
     let estado = estadosApuestas.get(userId);
 
+    const baseMs = config.APUESTAS?.COOLDOWN_BASE_MS || 25000;
+    const fatiga = config.APUESTAS?.FATIGA || {
+        NIVEL1_TIROS: 5,
+        COOLDOWN_NIVEL1_MS: 45000,
+        NIVEL2_TIROS: 10,
+        COOLDOWN_NIVEL2_MS: 90000,
+        LIMITE_BLOQUEO_TIROS: 15,
+        DURACION_BLOQUEO_MS: 7200000,
+        TIEMPO_RESET_RACHA_MS: 900000,
+    };
+
     if (estado) {
+        // Si estaba en bloqueo de horas
+        if (estado.bloqueoHasta && ahora < estado.bloqueoHasta) {
+            return {
+                enCooldown: true,
+                restanteMs: estado.bloqueoHasta - ahora,
+                tirosSeguidos: estado.tirosSeguidos,
+                esBloqueoHoras: true,
+            };
+        }
+
         const tiempoPasado = ahora - estado.ultimoTiro;
 
-        // Si todavía está en enfriamiento activo
+        // Si todavía está en enfriamiento
         if (tiempoPasado < estado.cooldownActualMs) {
             return {
                 enCooldown: true,
                 restanteMs: estado.cooldownActualMs - tiempoPasado,
                 tirosSeguidos: estado.tirosSeguidos,
+                esBloqueoHoras: false,
             };
         }
 
-        // Si descansó más de 60 segundos, su racha de tiros seguidos se reinicia
-        if (tiempoPasado > 60000) {
+        // Si descansó más del tiempo de reset (15 min), reiniciar racha
+        if (tiempoPasado > fatiga.TIEMPO_RESET_RACHA_MS) {
             estado.tirosSeguidos = 1;
+            estado.bloqueoHasta = null;
         } else {
             estado.tirosSeguidos += 1;
         }
@@ -62,23 +119,56 @@ function verificarCooldown(userId, tipoJuego = 'general') {
         estado = {
             ultimoTiro: 0,
             tirosSeguidos: 1,
-            cooldownActualMs: 15000,
+            cooldownActualMs: baseMs,
+            bloqueoHasta: null,
         };
         estadosApuestas.set(userId, estado);
     }
 
+    // Calcular próximo cooldown según el número de tiros alcanzado
     estado.ultimoTiro = ahora;
-    estado.cooldownActualMs = calcularCooldownInteligente(estado.tirosSeguidos, tipoJuego);
+
+    if (estado.tirosSeguidos >= fatiga.LIMITE_BLOQUEO_TIROS) {
+        estado.cooldownActualMs = fatiga.DURACION_BLOQUEO_MS;
+        estado.bloqueoHasta = ahora + fatiga.DURACION_BLOQUEO_MS;
+    } else if (estado.tirosSeguidos >= fatiga.NIVEL2_TIROS) {
+        estado.cooldownActualMs = fatiga.COOLDOWN_NIVEL2_MS;
+        estado.bloqueoHasta = null;
+    } else if (estado.tirosSeguidos >= fatiga.NIVEL1_TIROS) {
+        estado.cooldownActualMs = fatiga.COOLDOWN_NIVEL1_MS;
+        estado.bloqueoHasta = null;
+    } else {
+        estado.cooldownActualMs = baseMs;
+        estado.bloqueoHasta = null;
+    }
+
+    // Persistir estado de fatiga en la base de datos
+    Usuario.updateOne(
+        { userId },
+        {
+            $set: {
+                rachaApuestas: estado.tirosSeguidos,
+                ultimoTiroApuesta: new Date(ahora),
+                bloqueoApuestasHasta: estado.bloqueoHasta ? new Date(estado.bloqueoHasta) : null,
+            }
+        }
+    ).catch(() => null);
 
     // Limpieza periódica de memoria
     if (estadosApuestas.size > 2000) {
-        const limite = ahora - 180000;
+        const limite = ahora - 300000;
         for (const [id, est] of estadosApuestas.entries()) {
-            if (est.ultimoTiro < limite) estadosApuestas.delete(id);
+            if (!est.bloqueoHasta && est.ultimoTiro < limite) estadosApuestas.delete(id);
         }
     }
 
-    return { enCooldown: false, tirosSeguidos: estado.tirosSeguidos, cooldownActualMs: estado.cooldownActualMs };
+    return {
+        enCooldown: false,
+        tirosSeguidos: estado.tirosSeguidos,
+        cooldownActualMs: estado.cooldownActualMs,
+        bloqueoHasta: estado.bloqueoHasta,
+        esBloqueoHoras: Boolean(estado.bloqueoHasta),
+    };
 }
 
 function validarApuesta(usuario, monto) {
