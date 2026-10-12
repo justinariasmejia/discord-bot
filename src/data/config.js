@@ -89,7 +89,9 @@ module.exports = {
 
         // Ruleta Grupal en canal público
         RULETA_GRUPAL: {
-            DURACION_SEGUNDOS: 30,
+            DURACION_SEGUNDOS: 60,              // 1 minuto de espera para que la gente participe
+            DURACION_RESULTADO_SEGUNDOS: 60,    // 1 minuto de resultado visible antes de auto-eliminarse
+            COOLDOWN_SEGUNDOS: 60,              // 1 minuto de cooldown tras finalizar antes de poder iniciar otra
             CORTE_CASA: 0.05,
             MINIMO_JUGADORES: 2,
         },

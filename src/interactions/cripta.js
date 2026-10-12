@@ -103,18 +103,37 @@ module.exports = {
                 const res = await iniciarRondaGrupal(interaction.channel, interaction.guildId, interaction.user);
                 if (!res.ok) {
                     if (res.motivo === 'ya_activa') {
-                        const embedError = base('⏳ Ronda en Curso', 'Ya hay una ruleta grupal activa en este canal.', COLORES.morado);
+                        const embedError = base('⏳ Ronda en Curso', 'Ya hay una ruleta comunitaria en marcha en este canal.\n\n¡Participa en el mensaje público de la ruleta!', COLORES.morado);
+                        return interaction.editReply({ embeds: [embedError], components: [filaVolver(duenoId)] });
+                    }
+                    if (res.motivo === 'mostrando_resultado') {
+                        const segs = Math.ceil((res.restanteMs || 1000) / 1000);
+                        const embedError = base(
+                            '🏆 Resultados en Pantalla',
+                            `La ronda comunitaria anterior acaba de concluir y está mostrando al ganador en el canal.\n\nPodrás iniciar otra ronda en **${segs}s**.`,
+                            COLORES.morado
+                        );
+                        return interaction.editReply({ embeds: [embedError], components: [filaVolver(duenoId)] });
+                    }
+                    if (res.motivo === 'en_cooldown') {
+                        const segs = Math.ceil((res.restanteMs || 1000) / 1000);
+                        const embedError = base(
+                            '⏳ Ruleta en Enfriamiento',
+                            `La ruleta comunitaria está recargando su energía de ultratumba.\n\nPodrás iniciar una nueva ronda en **${segs}s**.`,
+                            COLORES.morado
+                        );
                         return interaction.editReply({ embeds: [embedError], components: [filaVolver(duenoId)] });
                     }
                     if (res.motivo === 'evento_cerrado') {
-                        const embedError = base('🕯️ Evento Cerrado', 'La Cripta ya ha cerrado sus puertas.', COLORES.negro);
+                        const embedError = base('🕯️ Evento Cerrado', 'La Cripta ya ha cerrado sus puertas por mantenimiento o fin de temporada.', COLORES.negro);
                         return interaction.editReply({ embeds: [embedError], components: [filaVolver(duenoId)] });
                     }
                 }
                 const embedIniciada = base(
                     '👥 ¡Ruleta Grupal Iniciada!',
-                    'Se ha iniciado una ronda comunitaria de **30 segundos** en este canal.\n' +
-                    'Presiona el botón **Unirme / Apostar** en el mensaje público del canal para colocar tus huesos.',
+                    'Se ha iniciado una ronda comunitaria de **1 minuto (60s)** en este canal.\n\n' +
+                    'Presiona el botón **[Unirme / Apostar 🦴]** en el mensaje público del canal para colocar tus huesos.\n' +
+                    'Los resultados permanecerán visibles durante **1 minuto** al concluir.',
                     COLORES.verde
                 );
                 return interaction.editReply({ embeds: [embedIniciada], components: [filaVolver(duenoId)] });

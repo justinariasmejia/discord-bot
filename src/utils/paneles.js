@@ -256,7 +256,7 @@ function panelMenuApuestas(duenoId, usuario) {
         `Selecciona el juego que deseas jugar con los botones de abajo:\n\n` +
         `🪙 **Cara o Cruz**: Lanza la moneda espectral giratoria. 50% prob. | Paga **x2.0**\n` +
         `🎰 **Tragamonedas**: 3 carretes de Halloween (🎃 👻 💀 🦴 🕷️) | Hasta **x15.0**\n` +
-        `👥 **Ruleta Grupal**: Ronda pública comunitaria de 30s en el canal\n\n` +
+        `👥 **Ruleta Grupal**: Ronda comunitaria de 1 min (60s) en el canal\n\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
         `🦴 **Tus huesos disponibles:** ${formatoNum(usuario.huesos)}\n` +
         `⚖️ **Límites:** Mínimo **${config.APUESTAS.MINIMA}** | Máximo **${formatoNum(maxPermitido)}** huesos`;
@@ -278,7 +278,7 @@ function panelMenuApuestas(duenoId, usuario) {
             .setDisabled(usuario.huesos < config.APUESTAS.MINIMA),
         new ButtonBuilder()
             .setCustomId(`cripta:sel_juego_btn:${duenoId}:ruleta_grupal`)
-            .setLabel('Ruleta Grupal (30s)')
+            .setLabel('Ruleta Grupal (60s)')
             .setEmoji('👥')
             .setStyle(ButtonStyle.Secondary)
     );

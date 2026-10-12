@@ -18,6 +18,15 @@ const { obtenerConfig, eventoActivo, multiplicadorActual } = require('./evento')
 const MEDALLAS = [EMOJIS.corona || '🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 const canalesCriptaCache = new Map(); // guildId -> { canalId, mensajeId }
 const debouncesActualizacion = new Map(); // guildId -> timeout
+const mensajesProtegidosCripta = new Set(); // mensajeId -> booleano para nunca borrarlos en bulkDelete
+
+function protegerMensajeCripta(mensajeId) {
+    if (mensajeId) mensajesProtegidosCripta.add(mensajeId);
+}
+
+function desprotegerMensajeCripta(mensajeId) {
+    if (mensajeId) mensajesProtegidosCripta.delete(mensajeId);
+}
 
 let _client = null;
 
@@ -204,9 +213,21 @@ async function actualizarPanelCripta(client, guildId) {
 
         // 1. Limpieza de mensajes de texto en el canal para mantenerlo impecable
         try {
-            const recientes = await canal.messages.fetch({ limit: 15 }).catch(() => null);
+            const recientes = await canal.messages.fetch({ limit: 25 }).catch(() => null);
             if (recientes) {
-                const sobrantes = recientes.filter(m => m.id !== config.mensajeId);
+                const RondaGrupal = require('../models/RondaGrupal');
+                const rondasVivas = await RondaGrupal.find({
+                    canalId: canal.id,
+                    estado: 'activa',
+                }).select('mensajeId').lean().catch(() => []);
+                const idsRondasDb = new Set(rondasVivas.map(r => r.mensajeId).filter(Boolean));
+
+                const sobrantes = recientes.filter(m => {
+                    if (m.id === config.mensajeId) return false;
+                    if (mensajesProtegidosCripta.has(m.id)) return false;
+                    if (idsRondasDb.has(m.id)) return false;
+                    return true;
+                });
                 if (sobrantes.size > 0) {
                     await canal.bulkDelete(sobrantes).catch(() => {});
                 }

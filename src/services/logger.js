@@ -167,6 +167,25 @@ async function logApuesta(guildId, userId, resultado) {
     });
 }
 
+// ── 3.1. LOG PÚBLICO: RULETA GRUPAL COMUNITARIA ──
+async function logRuletaGrupal(guildId, ganadorId, totalPozo, premio, numParticipantes, probGanador) {
+    const campos = [
+        { name: '🏆 Ganador', value: `<@${ganadorId}>`, inline: true },
+        { name: '💰 Pozo Total', value: `${formatoNum(totalPozo)} 🦴`, inline: true },
+        { name: '🎁 Premio Neto (+95%)', value: `+${formatoNum(premio)} 🦴`, inline: true },
+        { name: '👥 Jugadores', value: `${numParticipantes} cazadores`, inline: true },
+        { name: '🎲 Probabilidad', value: `${probGanador}%`, inline: true },
+    ];
+
+    await enviarLogPublico(guildId, {
+        tipo: 'ganancia',
+        titulo: '🎡 Victoria en Ruleta Grupal',
+        descripcion: `¡<@${ganadorId}> triunfó en la Ruleta Grupal de la Cripta y se llevó el pozo acumulado!`,
+        userId: ganadorId,
+        campos,
+    });
+}
+
 // ── 4. LOG PÚBLICO: DUELOS PVP ──
 async function logDuelo(guildId, ganadorId, perdedorId, premio) {
     const campos = [
@@ -231,6 +250,7 @@ module.exports = {
     logCaza,
     logDiario,
     logApuesta,
+    logRuletaGrupal,
     logDuelo,
     logEvento,
     logSorteo,
