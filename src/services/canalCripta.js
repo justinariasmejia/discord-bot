@@ -40,10 +40,47 @@ async function construirPanelCripta(guildId) {
     const activo = eventoActivo(config);
     const multiplicador = multiplicadorActual(config);
 
-    const topUsuarios = await Usuario.find({ guildId })
-        .sort({ huesos: -1, updatedAt: 1 })
-        .limit(10)
-        .lean();
+    let topUsuarios = [];
+    if (config.modoTest) {
+        // En modo mantenimiento, el ranking muestra EXCLUSIVAMENTE a los Testers y Administradores autorizados
+        const idsTesters = new Set();
+        if (config.testersIds && Array.isArray(config.testersIds)) {
+            config.testersIds.forEach((id) => idsTesters.add(id));
+        }
+        if (config.usuariosAdminIds && Array.isArray(config.usuariosAdminIds)) {
+            config.usuariosAdminIds.forEach((id) => idsTesters.add(id));
+        }
+        const { SUPER_ADMINS } = require('./evento');
+        SUPER_ADMINS.forEach((id) => idsTesters.add(id));
+
+        try {
+            const guild = _client?.guilds?.cache?.get(guildId);
+            if (guild) {
+                if (config.rolTesterId) {
+                    const rol = guild.roles.cache.get(config.rolTesterId);
+                    if (rol) rol.members.forEach((m) => idsTesters.add(m.id));
+                }
+                if (config.rolesAdminIds && Array.isArray(config.rolesAdminIds)) {
+                    config.rolesAdminIds.forEach((rId) => {
+                        const rol = guild.roles.cache.get(rId);
+                        if (rol) rol.members.forEach((m) => idsTesters.add(m.id));
+                    });
+                }
+            }
+        } catch {}
+
+        if (idsTesters.size > 0) {
+            topUsuarios = await Usuario.find({ guildId, userId: { $in: Array.from(idsTesters) } })
+                .sort({ huesos: -1, updatedAt: 1 })
+                .limit(10)
+                .lean();
+        }
+    } else {
+        topUsuarios = await Usuario.find({ guildId })
+            .sort({ huesos: -1, updatedAt: 1 })
+            .limit(10)
+            .lean();
+    }
 
     const totalCazadores = await Usuario.countDocuments({ guildId });
     const maxHuesos = topUsuarios.length > 0 ? topUsuarios[0].huesos : 1;
@@ -53,8 +90,19 @@ async function construirPanelCripta(guildId) {
     if (config.modoTest) {
         desc += '### 🛠️ Tabla de Clasificación (Top 10) • EN MANTENIMIENTO\n';
         desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-        desc += '⚙️ **Las clasificaciones se encuentran en pausa técnica por mantenimiento.**\n';
-        desc += '🔒 *El Top 10 oficial se activará en vivo en cuanto La Cripta sea inaugurada.*\n';
+        desc += '⚙️ *La Cripta se encuentra en pausa técnica por mantenimiento.*\n';
+        desc += '🧪 **Ranking de Pruebas (Testers y Moderación):**\n\n';
+
+        if (topUsuarios.length === 0) {
+            desc += '> ⚠️ *No hay ningún tester participando en este momento...*\n';
+            desc += '> _El ranking de pruebas se mostrará cuando un tester interactúe en el cementerio._\n';
+        } else {
+            topUsuarios.forEach((u, i) => {
+                const medalla = MEDALLAS[i] || `#${i + 1}`;
+                const racha = u.rachaDiaria > 0 ? ` • 🔥 \`${u.rachaDiaria}d\`` : '';
+                desc += `${medalla} 🧪 <@${u.userId}> — **${formatoNum(u.huesos)}** 🦴${racha}\n`;
+            });
+        }
         desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
     } else {
         desc += '### 🏆 Tabla de Clasificación en Vivo (Top 10)\n';
@@ -77,10 +125,10 @@ async function construirPanelCripta(guildId) {
     if (!activo) {
         desc += '🔴 **La Cripta ha cerrado sus puertas por esta temporada.**\n';
     } else if (config.modoTest) {
-        desc += '🛠️ **Estado:** Mantenimiento / Pausado (Apertura Próximamente)\n';
-        desc += '⏳ *El evento aún no ha iniciado oficialmente. Todos los cazadores comienzan con 100 huesos.* 🦴\n';
+        desc += '🛠️ **Estado:** En Mantenimiento (Modo Pruebas)\n';
+        desc += '⏳ *Fase de pruebas técnicas. Al reanudar el evento, todos continuarán con sus huesos oficiales.* 🦴\n';
     } else {
-        desc += `🟢 **Estado:** Temporada Activa\n`;
+        desc += `🟢 **Estado:** Evento Activo\n`;
         desc += `⏳ **Cierre:** ${tiempoRelativo(config.fechaCierre.getTime())}\n`;
         if (multiplicador > 1) {
             desc += `⚡ **Bonus Activo:** ¡Ganancias multiplicadas **x${multiplicador}**!\n`;

@@ -6,6 +6,7 @@ const usuarioSchema = new Schema(
         userId: { type: String, required: true },
         guildId: { type: String, required: true },
         huesos: { type: Number, default: 100, min: 0 },
+        huesosPreTest: { type: Number, default: null }, // Respaldo antes de entrar a modo test
         rachaDiaria: { type: Number, default: 0 },
         ultimoDiario: { type: Date, default: null },
         ultimoCazar: { type: Date, default: null },

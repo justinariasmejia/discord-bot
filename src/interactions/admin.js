@@ -289,13 +289,13 @@ module.exports = {
         // ── 4. Toggle Mantenimiento / Modo Test ──
         if (accion === 'panel_toggle_mantenimiento') {
             await safeDeferUpdate(interaction);
+            const { alternarModoTest } = require('../services/evento');
             const config = await ConfigEvento.findOne({ guildId });
-            config.modoTest = !config.modoTest;
-            await config.save();
+            const nuevoEstado = !config.modoTest;
+            await alternarModoTest(guildId, nuevoEstado);
 
-            await logAdmin(guildId, interaction.user.id, 'Modo Test / Mantenimiento', `${config.modoTest ? '🛠️ ACTIVADO (Pausado)' : '🟢 DESACTIVADO (En vivo)'}`);
+            await logAdmin(guildId, interaction.user.id, 'Modo Test / Mantenimiento', `${nuevoEstado ? '🛠️ ACTIVADO (Pausado)' : '🟢 DESACTIVADO (En vivo)'}`);
             solicitarActualizacionAdminPanel(guildId);
-            // Sincronizar también el panel de La Cripta para que habilite/deshabilite botones en vivo
             const { actualizarPanelCripta } = require('../services/canalCripta');
             actualizarPanelCripta(interaction.client, guildId);
 

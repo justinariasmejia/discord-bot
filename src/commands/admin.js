@@ -962,12 +962,8 @@ module.exports = {
             const activar = interaction.options.getBoolean('activar');
             const canalTest = interaction.options.getChannel('canal_test');
 
-            const conf = await obtenerConfig(guildId);
-            conf.modoTest = activar;
-            if (canalTest) {
-                conf.canalTestId = canalTest.id;
-            }
-            await conf.save();
+            const { alternarModoTest } = require('../services/evento');
+            const conf = await alternarModoTest(guildId, activar, canalTest ? canalTest.id : null);
 
             const estadoStr = activar ? '🟢 **ACTIVADO**' : '🔴 **DESACTIVADO**';
             const canalStr = conf.canalTestId ? `<#${conf.canalTestId}>` : '_Ninguno específico (usa el canal de eventos configurado)_';

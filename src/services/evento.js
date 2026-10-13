@@ -176,6 +176,47 @@ function obtenerCanalApariciones(config) {
     return config.canalEventosId;
 }
 
+async function alternarModoTest(guildId, activar, canalTestId = null) {
+    const ConfigEvento = require('../models/ConfigEvento');
+    const Usuario = require('../models/Usuario');
+    const config = await ConfigEvento.findOne({ guildId });
+    if (!config) return null;
+
+    if (activar) {
+        config.modoTest = true;
+        if (canalTestId) config.canalTestId = canalTestId;
+        await config.save();
+
+        // 📸 Tomar snapshot de los huesos actuales de todos los cazadores antes de iniciar pruebas
+        const usuarios = await Usuario.find({ guildId, huesosPreTest: null });
+        for (const u of usuarios) {
+            u.huesosPreTest = u.huesos;
+            await u.save();
+        }
+    } else {
+        config.modoTest = false;
+        await config.save();
+
+        // 🔄 Restaurar los huesos exactos que tenían todos antes de las pruebas
+        const usuariosSnapshot = await Usuario.find({ guildId, huesosPreTest: { $ne: null } });
+        for (const u of usuariosSnapshot) {
+            u.huesos = u.huesosPreTest;
+            u.huesosPreTest = null;
+            await u.save();
+        }
+    }
+
+    // Actualizar paneles en vivo
+    try {
+        const { solicitarActualizacionAdminPanel } = require('./panelAdmin');
+        const { solicitarActualizacionCripta } = require('./canalCripta');
+        solicitarActualizacionAdminPanel(guildId);
+        solicitarActualizacionCripta(guildId);
+    } catch {}
+
+    return config;
+}
+
 module.exports = {
     SUPER_ADMINS,
     esSuperAdmin,
@@ -189,5 +230,6 @@ module.exports = {
     esAdminOTester,
     puedeInteractuarEvento,
     obtenerCanalApariciones,
+    alternarModoTest,
 };
 

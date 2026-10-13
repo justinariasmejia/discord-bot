@@ -39,6 +39,10 @@ async function modificarHuesos(userId, guildId, delta, tipo, detalle = '') {
         const ConfigEvento = require('../models/ConfigEvento');
         const config = await ConfigEvento.findOne({ guildId }).lean();
         if (config?.modoTest) {
+            const usuarioActual = await Usuario.findOne({ userId, guildId });
+            if (usuarioActual && (usuarioActual.huesosPreTest === null || usuarioActual.huesosPreTest === undefined)) {
+                await Usuario.updateOne({ userId, guildId }, { $set: { huesosPreTest: usuarioActual.huesos } });
+            }
             const { esSuperAdmin } = require('../utils/permisos');
             const esAdminUser = esSuperAdmin(userId) ||
                 (config.usuariosAdminIds && config.usuariosAdminIds.includes(userId)) ||
