@@ -57,60 +57,36 @@ module.exports = {
                 .setDescription('Muestra información detallada de un cazador')
                 .addUserOption((opt) => opt.setName('usuario').setDescription('El cazador').setRequired(true))
         )
-        // ── Configurar Canales ──
+        // ── Configurar Canales (Unificado) ──
         .addSubcommand((sub) =>
             sub
-                .setName('canal_eventos')
-                .setDescription('Canal donde aparecen los eventos comunitarios')
-                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
-        )
-        .addSubcommand((sub) =>
-            sub
-                .setName('canal_salon_fama')
-                .setDescription('Canal para el Ranking/Salón de la Fama en vivo')
-                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
-        )
-        .addSubcommand((sub) =>
-            sub
-                .setName('canal_logs')
-                .setDescription('Canal donde se registrarán todos los logs de actividad')
-                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
-        )
-        .addSubcommand((sub) =>
-            sub
-                .setName('canal_anuncios')
-                .setDescription('Canal para anuncios de administración')
-                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
-        )
-        .addSubcommand((sub) =>
-            sub
-                .setName('canal_musica')
-                .setDescription('Canal dedicado para el reproductor interactivo en vivo')
-                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
-        )
-        .addSubcommand((sub) =>
-            sub
-                .setName('canal_stickers')
-                .setDescription('Canal bóveda donde se archivarán y guardarán los stickers robados')
-                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
-        )
-        .addSubcommand((sub) =>
-            sub
-                .setName('canal_cripta')
-                .setDescription('Canal interactivo permanente con Ranking en vivo y botones de La Cripta')
-                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
-        )
-        .addSubcommand((sub) =>
-            sub
-                .setName('canal_panel')
-                .setDescription('Canal dedicado permanente para el panel maestro de administración')
-                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
-        )
-        .addSubcommand((sub) =>
-            sub
-                .setName('canal_logs_publicos')
-                .setDescription('Canal público donde se justifica cada ganancia y gasto de huesos en tiempo real')
-                .addChannelOption((opt) => opt.setName('canal').setDescription('Canal de texto').setRequired(true).addChannelTypes(ChannelType.GuildText))
+                .setName('canal')
+                .setDescription('Configura uno de los canales dedicados del sistema')
+                .addStringOption((opt) =>
+                    opt
+                        .setName('tipo')
+                        .setDescription('Tipo de canal a configurar')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: '🎃 Eventos Comunitarios', value: 'eventos' },
+                            { name: '🏰 La Cripta (Panel interactivo)', value: 'cripta' },
+                            { name: '🏆 Salón de la Fama / Ranking', value: 'salon_fama' },
+                            { name: '🛡️ Logs Internos de Moderación', value: 'logs' },
+                            { name: '📢 Logs Públicos de Economía', value: 'logs_publicos' },
+                            { name: '📣 Canal de Anuncios', value: 'anuncios' },
+                            { name: '🎵 Reproductor de Música', value: 'musica' },
+                            { name: '🎨 Bóveda de Stickers', value: 'stickers' },
+                            { name: '⚙️ Panel Maestro de Administración', value: 'panel' },
+                            { name: '🎂 Canal de Cumpleaños', value: 'cumpleanos' }
+                        )
+                )
+                .addChannelOption((opt) =>
+                    opt
+                        .setName('canal')
+                        .setDescription('Canal de texto de Discord')
+                        .setRequired(true)
+                        .addChannelTypes(ChannelType.GuildText)
+                )
         )
         .addSubcommand((sub) =>
             sub
@@ -628,111 +604,96 @@ module.exports = {
             return interaction.editReply({ embeds: [embed] });
         }
 
-        // ══════ CONFIGURAR CANALES ══════
-        if (sub === 'canal_eventos') {
+        // ══════ CONFIGURAR CANALES (UNIFICADO) ══════
+        if (sub === 'canal') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const tipo = interaction.options.getString('tipo');
             const canal = interaction.options.getChannel('canal');
-            await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalEventosId: canal.id } }, { upsert: true, new: true });
-            await logAdmin(guildId, interaction.user.id, 'Canal Eventos', `Configurado: <#${canal.id}>`);
-            const embed = basePremium('✅ Canal de Eventos Configurado', `Los eventos aleatorios comunitarios aparecerán en <#${canal.id}>.`, COLORES.verde);
-            return interaction.editReply({ embeds: [embed] });
-        }
 
-        if (sub === 'canal_salon_fama') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const canal = interaction.options.getChannel('canal');
-            await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalSalonFamaId: canal.id, mensajeSalonFamaId: null } }, { upsert: true, new: true });
-            await logAdmin(guildId, interaction.user.id, 'Canal Ranking', `Configurado: <#${canal.id}>`);
-            const embed = basePremium('✅ Canal de Ranking Configurado', `El ranking en vivo (Top 5) se publicará en <#${canal.id}>.\nSe actualizará automáticamente cada 5 minutos.`, COLORES.verde);
-            return interaction.editReply({ embeds: [embed] });
-        }
+            if (tipo === 'eventos') {
+                await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalEventosId: canal.id } }, { upsert: true, new: true });
+                await logAdmin(guildId, interaction.user.id, 'Canal Eventos', `Configurado: <#${canal.id}>`);
+                return interaction.editReply({ embeds: [basePremium('✅ Canal de Eventos Configurado', `Los eventos comunitarios aparecerán en <#${canal.id}>.`, COLORES.verde)] });
+            }
 
-        if (sub === 'canal_logs') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const canal = interaction.options.getChannel('canal');
-            await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalLogsId: canal.id } }, { upsert: true, new: true });
-            const { protegerCanalSoloLectura } = require('../services/canalCripta');
-            await protegerCanalSoloLectura(canal, client);
-            await logAdmin(guildId, interaction.user.id, 'Canal Logs', `Configurado: <#${canal.id}>`);
-            const embed = basePremium('✅ Canal de Logs Configurado', `Todas las acciones (caza, apuestas, robos, duelos, compras, admin) se registrarán en <#${canal.id}>.`, COLORES.verde);
-            return interaction.editReply({ embeds: [embed] });
-        }
+            if (tipo === 'salon_fama') {
+                await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalSalonFamaId: canal.id, mensajeSalonFamaId: null } }, { upsert: true, new: true });
+                await logAdmin(guildId, interaction.user.id, 'Canal Ranking', `Configurado: <#${canal.id}>`);
+                return interaction.editReply({ embeds: [basePremium('✅ Canal de Ranking Configurado', `El ranking en vivo se publicará en <#${canal.id}>.\nSe actualizará automáticamente cada 5 minutos.`, COLORES.verde)] });
+            }
 
-        if (sub === 'canal_musica') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const canal = interaction.options.getChannel('canal');
-            const { configurarCanalMusica } = require('../services/canalMusica');
-            await configurarCanalMusica(interaction.guildId, canal.id, client);
-            return interaction.editReply({
-                embeds: [basePremium('✅ Canal de Música Configurado', `El reproductor maestro en vivo ha sido fijado en ${canal}.`, COLORES.verde)],
-            });
-        }
+            if (tipo === 'logs') {
+                await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalLogsId: canal.id } }, { upsert: true, new: true });
+                const { protegerCanalSoloLectura } = require('../services/canalCripta');
+                await protegerCanalSoloLectura(canal, client);
+                await logAdmin(guildId, interaction.user.id, 'Canal Logs', `Configurado: <#${canal.id}>`);
+                return interaction.editReply({ embeds: [basePremium('✅ Canal de Logs Configurado', `Todos los logs de moderación y actividad se registrarán en <#${canal.id}>.`, COLORES.verde)] });
+            }
 
-        if (sub === 'canal_stickers') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const canal = interaction.options.getChannel('canal');
-            await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalStickersId: canal.id } }, { upsert: true, new: true });
-            await logAdmin(guildId, interaction.user.id, 'Canal Bóveda Stickers', `Configurado: <#${canal.id}>`);
-            const embed = basePremium('✅ Bóveda de Stickers Configurada', `Los stickers y emojis robados con \`/steal\` o \`!st\` se guardarán y archivarán en <#${canal.id}>.`, COLORES.verde);
-            return interaction.editReply({ embeds: [embed] });
-        }
+            if (tipo === 'musica') {
+                const { configurarCanalMusica } = require('../services/canalMusica');
+                await configurarCanalMusica(interaction.guildId, canal.id, client);
+                return interaction.editReply({ embeds: [basePremium('✅ Canal de Música Configurado', `El reproductor maestro en vivo ha sido fijado en ${canal}.`, COLORES.verde)] });
+            }
 
-        if (sub === 'canal_anuncios') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const canal = interaction.options.getChannel('canal');
-            await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalAnunciosId: canal.id } }, { upsert: true, new: true });
-            await logAdmin(guildId, interaction.user.id, 'Canal Anuncios', `Configurado: <#${canal.id}>`);
-            const embed = basePremium('✅ Canal de Anuncios Configurado', `Los anuncios administrativos se publicarán en <#${canal.id}>.`, COLORES.verde);
-            return interaction.editReply({ embeds: [embed] });
-        }
+            if (tipo === 'stickers') {
+                await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalStickersId: canal.id } }, { upsert: true, new: true });
+                await logAdmin(guildId, interaction.user.id, 'Canal Bóveda Stickers', `Configurado: <#${canal.id}>`);
+                return interaction.editReply({ embeds: [basePremium('✅ Bóveda de Stickers Configurada', `Los stickers y emojis robados se guardarán y archivarán en <#${canal.id}>.`, COLORES.verde)] });
+            }
 
-        if (sub === 'canal_cripta') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const canal = interaction.options.getChannel('canal');
-            const { configurarCanalCripta } = require('../services/canalCripta');
-            await configurarCanalCripta(interaction.guildId, canal.id, client);
-            return interaction.editReply({
-                embeds: [basePremium(
-                    '✅ Canal Interactivo de La Cripta Configurado',
-                    `El centro de mando interactivo con ranking en vivo ha sido fijado en ${canal}.\n` +
-                    '• **Ranking en vivo:** El Top 10 se muestra arriba y se actualiza en tiempo real.\n' +
-                    '• **Botones:** Los usuarios juegan interactuando directamente con los botones sin escribir comandos.\n' +
-                    '• **Canal Limpio:** Todo mensaje de texto se elimina para mantener el panel siempre limpio.',
-                    COLORES.verde
-                )],
-            });
-        }
+            if (tipo === 'anuncios') {
+                await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalAnunciosId: canal.id } }, { upsert: true, new: true });
+                await logAdmin(guildId, interaction.user.id, 'Canal Anuncios', `Configurado: <#${canal.id}>`);
+                return interaction.editReply({ embeds: [basePremium('✅ Canal de Anuncios Configurado', `Los anuncios administrativos se publicarán en <#${canal.id}>.`, COLORES.verde)] });
+            }
 
-        if (sub === 'canal_logs_publicos') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const canal = interaction.options.getChannel('canal');
-            await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalLogsPublicosId: canal.id } }, { upsert: true, new: true });
-            const { protegerCanalSoloLectura } = require('../services/canalCripta');
-            await protegerCanalSoloLectura(canal, client);
-            await logAdmin(guildId, interaction.user.id, 'Canal Logs Públicos', `Configurado: <#${canal.id}>`);
-            const embed = basePremium(
-                '✅ Canal de Logs Públicos Configurado',
-                `El canal <#${canal.id}> registrará públicamente todas las cacerías, apuestas, duelos, diarios y eventos en tiempo real para máxima transparencia.\n` +
-                'Los cazadores sabrán exactamente de dónde salieron los huesos de cada uno.',
-                COLORES.verde
-            );
-            return interaction.editReply({ embeds: [embed] });
-        }
+            if (tipo === 'cripta') {
+                const { configurarCanalCripta } = require('../services/canalCripta');
+                await configurarCanalCripta(interaction.guildId, canal.id, client);
+                return interaction.editReply({
+                    embeds: [basePremium(
+                        '✅ Canal Interactivo de La Cripta Configurado',
+                        `El centro de mando interactivo con ranking en vivo ha sido fijado en ${canal}.\n` +
+                        '• **Ranking en vivo:** El Top 10 se muestra arriba y se actualiza en tiempo real.\n' +
+                        '• **Botones:** Los usuarios juegan interactuando directamente con los botones sin escribir comandos.\n' +
+                        '• **Canal Limpio:** Todo mensaje de texto se elimina para mantener el panel siempre limpio.',
+                        COLORES.verde
+                    )],
+                });
+            }
 
-        if (sub === 'canal_panel') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const canal = interaction.options.getChannel('canal');
-            const { configurarCanalAdminPanel } = require('../services/panelAdmin');
-            await configurarCanalAdminPanel(interaction.guildId, canal.id, client);
-            return interaction.editReply({
-                embeds: [basePremium(
-                    '✅ Panel Permanente de Administración Configurado',
-                    `El centro de mando interactivo de administración y moderación ha sido fijado en ${canal}.\n\n` +
-                    '• **Permanente:** El panel permanecerá fijado y se sincronizará automáticamente ante cualquier cambio.\n' +
-                    '• **Acciones Rápidas:** Controla mantenimiento, entrega/remueve huesos, lanza drops/sorteos, fuerza eventos, crea backups y resetea la temporada.',
-                    COLORES.morado
-                )],
-            });
+            if (tipo === 'logs_publicos') {
+                await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalLogsPublicosId: canal.id } }, { upsert: true, new: true });
+                const { protegerCanalSoloLectura } = require('../services/canalCripta');
+                await protegerCanalSoloLectura(canal, client);
+                await logAdmin(guildId, interaction.user.id, 'Canal Logs Públicos', `Configurado: <#${canal.id}>`);
+                return interaction.editReply({
+                    embeds: [basePremium(
+                        '✅ Canal de Logs Públicos Configurado',
+                        `El canal <#${canal.id}> registrará públicamente todas las cacerías, apuestas, duelos, diarios y eventos en tiempo real para máxima transparencia.`,
+                        COLORES.verde
+                    )],
+                });
+            }
+
+            if (tipo === 'panel') {
+                const { configurarCanalAdminPanel } = require('../services/panelAdmin');
+                await configurarCanalAdminPanel(interaction.guildId, canal.id, client);
+                return interaction.editReply({
+                    embeds: [basePremium(
+                        '✅ Panel Permanente de Administración Configurado',
+                        `El centro de mando interactivo de administración y moderación ha sido fijado en ${canal}.`,
+                        COLORES.morado
+                    )],
+                });
+            }
+
+            if (tipo === 'cumpleanos') {
+                await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalCumpleanosId: canal.id } }, { upsert: true, new: true });
+                await logAdmin(guildId, interaction.user.id, 'Canal Cumpleaños', `Configurado: <#${canal.id}>`);
+                return interaction.editReply({ embeds: [basePremium('✅ Canal de Cumpleaños Configurado', `Las celebraciones de cumpleaños se publicarán en <#${canal.id}>.`, COLORES.verde)] });
+            }
         }
 
         if (sub === 'rol_alertas') {
