@@ -7,12 +7,12 @@ const { conBloqueo } = require('../utils/locks');
 const { generarBotinCaza } = require('../data/loot');
 const configBalance = require('../data/config');
 
-async function cazar(userId, guildId) {
+async function cazar(userId, guildId, esTesterOAdmin = false) {
     const config = await obtenerConfig(guildId);
     if (!eventoActivo(config)) {
         return { ok: false, motivo: 'evento_cerrado' };
     }
-    if (config.modoTest) {
+    if (config.modoTest && !esTesterOAdmin) {
         return { ok: false, motivo: 'modo_test' };
     }
 

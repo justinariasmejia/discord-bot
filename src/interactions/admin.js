@@ -545,6 +545,39 @@ module.exports = {
         if (accion === 'sel_evento') {
             await interaction.deferUpdate();
             const tipoEvento = interaction.values[0];
+
+            if (tipoEvento === 'oogie_boogie') {
+                const filaOogie = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`admin:oogie_target_self:${interaction.user.id}`)
+                        .setLabel('👤 Desafiarme a Mí')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId(`admin:oogie_target_pick:${interaction.user.id}`)
+                        .setLabel('🎯 Elegir Usuario')
+                        .setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder()
+                        .setCustomId(`admin:oogie_target_random:${interaction.user.id}`)
+                        .setLabel('🎲 Al Azar (Top Ricos)')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+
+                const embedOogie = basePremium(
+                    '🎲 Desafío de Oogie Boogie • Seleccionar Objetivo',
+                    '¿A quién deseas que desafíe Oogie Boogie en el cementerio?\n\n' +
+                    '• **👤 Desafiarme a Mí:** El monstruo aparecerá señalándote a ti como víctima exclusiva.\n' +
+                    '• **🎯 Elegir Usuario:** Podrás elegir a cualquier miembro del servidor para retarlo.\n' +
+                    '• **🎲 Al Azar:** Selección natural entre las mayores fortunas del servidor.',
+                    COLORES.morado
+                );
+
+                return interaction.editReply({
+                    content: '',
+                    embeds: [embedOogie],
+                    components: [filaOogie],
+                });
+            }
+
             const res = await forzarEvento(guildId, client, tipoEvento);
             if (!res) {
                 return interaction.editReply({ content: '❌ No se pudo disparar el evento. Revisa que el canal de eventos esté configurado.' });
@@ -552,6 +585,63 @@ module.exports = {
             await logAdmin(guildId, interaction.user.id, 'Evento Manual Forzado', `Evento: ${tipoEvento}`);
             return interaction.editReply({
                 content: `✅ ¡Evento **${tipoEvento}** lanzado con éxito!`,
+                components: [],
+            });
+        }
+
+        // Manejadores de Objetivo de Oogie Boogie
+        if (accion === 'oogie_target_self') {
+            await interaction.deferUpdate();
+            const res = await forzarEvento(guildId, client, 'oogie_boogie', interaction.user.id);
+            if (!res) {
+                return interaction.editReply({ content: '❌ No se pudo invocar a Oogie Boogie. Revisa que el canal de eventos o de pruebas esté configurado.' });
+            }
+            await logAdmin(guildId, interaction.user.id, 'Oogie Boogie Forzado', `Desafiado: <@${interaction.user.id}> (Admin)`);
+            return interaction.editReply({
+                content: `✅ ¡Oogie Boogie ha salido de las sombras y te ha desafiado a ti (<@${interaction.user.id}>)!`,
+                embeds: [],
+                components: [],
+            });
+        }
+
+        if (accion === 'oogie_target_random') {
+            await interaction.deferUpdate();
+            const res = await forzarEvento(guildId, client, 'oogie_boogie', null);
+            if (!res) {
+                return interaction.editReply({ content: '❌ No se pudo invocar a Oogie Boogie.' });
+            }
+            await logAdmin(guildId, interaction.user.id, 'Oogie Boogie Forzado', 'Selección al azar entre los más ricos');
+            return interaction.editReply({
+                content: '✅ ¡Oogie Boogie ha salido de las sombras y ha desafiado a las mayores fortunas del servidor!',
+                embeds: [],
+                components: [],
+            });
+        }
+
+        if (accion === 'oogie_target_pick') {
+            const select = new UserSelectMenuBuilder()
+                .setCustomId(`admin:oogie_sel_user:${interaction.user.id}`)
+                .setPlaceholder('🎯 Selecciona al usuario que retará Oogie Boogie...')
+                .setMinValues(1)
+                .setMaxValues(1);
+
+            return interaction.reply({
+                content: 'Elige al cazador que será víctima del desafío de Oogie Boogie:',
+                components: [new ActionRowBuilder().addComponents(select)],
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
+        if (accion === 'oogie_sel_user') {
+            await interaction.deferUpdate();
+            const targetId = interaction.values[0];
+            const res = await forzarEvento(guildId, client, 'oogie_boogie', targetId);
+            if (!res) {
+                return interaction.editReply({ content: '❌ No se pudo invocar a Oogie Boogie.' });
+            }
+            await logAdmin(guildId, interaction.user.id, 'Oogie Boogie Forzado', `Desafiado: <@${targetId}>`);
+            return interaction.editReply({
+                content: `✅ ¡Oogie Boogie ha salido de las sombras y ha desafiado a <@${targetId}>!`,
                 components: [],
             });
         }
@@ -723,38 +813,68 @@ module.exports = {
                 ? config.usuariosAdminIds.map(id => `<@${id}>`).join(', ')
                 : '_Ninguno adicional_';
 
-            const filaBotones = new ActionRowBuilder().addComponents(
+            const testerStr = config.rolTesterId
+                ? `<@&${config.rolTesterId}>`
+                : '_Ninguno configurado_';
+
+            const testersUsersStr = (config.testersIds && config.testersIds.length > 0)
+                ? config.testersIds.map(id => `<@${id}>`).join(', ')
+                : '_Ninguno asignado_';
+
+            const filaBotones1 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('admin:permiso_agregar_rol:admin')
-                    .setLabel('➕ Agregar Rol')
+                    .setLabel('➕ Rol Admin')
                     .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
                     .setCustomId('admin:permiso_quitar_rol:admin')
-                    .setLabel('➖ Quitar Rol')
+                    .setLabel('➖ Rol Admin')
                     .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
                     .setCustomId('admin:permiso_agregar_user:admin')
-                    .setLabel('➕ Agregar Usuario')
+                    .setLabel('➕ User Admin')
                     .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
                     .setCustomId('admin:permiso_quitar_user:admin')
-                    .setLabel('➖ Quitar Usuario')
+                    .setLabel('➖ User Admin')
                     .setStyle(ButtonStyle.Danger)
             );
 
+            const filaBotones2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('admin:permiso_set_rol_tester:admin')
+                    .setLabel('🧪 Rol Tester')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('admin:permiso_del_rol_tester:admin')
+                    .setLabel('❌ Quitar Rol Tester')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(!config.rolTesterId),
+                new ButtonBuilder()
+                    .setCustomId('admin:permiso_add_tester_user:admin')
+                    .setLabel('➕ User Tester')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId('admin:permiso_del_tester_user:admin')
+                    .setLabel('➖ User Tester')
+                    .setStyle(ButtonStyle.Danger)
+                    .setDisabled(!config.testersIds || config.testersIds.length === 0)
+            );
+
             const embedPerms = basePremium(
-                '🛡️ Configuración de Permisos de Staff • La Cripta',
-                'Define qué roles de Discord o personas específicas tendrán acceso al panel y comandos de moderación:\n\n' +
-                `🎭 **Roles Autorizados:** ${rolesStr}\n\n` +
-                `👤 **Usuarios Directos:** ${usersStr}\n\n` +
-                '*(Los Administradores nativos de Discord siempre tienen acceso maestro).*\n\n' +
-                '👇 *Selecciona qué acción deseas realizar:*',
+                '🛡️ Configuración de Permisos y Testers • La Cripta',
+                'Define qué roles de Discord o personas específicas tendrán acceso a moderación y pruebas:\n\n' +
+                `🎭 **Roles Administradores:** ${rolesStr}\n\n` +
+                `👤 **Usuarios Administradores:** ${usersStr}\n\n` +
+                `🧪 **Rol Tester (Modo Pruebas):** ${testerStr}\n\n` +
+                `🔬 **Usuarios Testers:** ${testersUsersStr}\n\n` +
+                '*(Los Administradores y Testers pueden participar y probar La Cripta incluso durante mantenimiento).*',
                 COLORES.morado
             );
 
             return interaction.reply({
                 embeds: [embedPerms],
-                components: [filaBotones],
+                components: [filaBotones1, filaBotones2],
                 flags: MessageFlags.Ephemeral,
             });
         }
@@ -911,6 +1031,136 @@ module.exports = {
             solicitarActualizacionAdminPanel(guildId);
             return interaction.editReply({
                 content: `✅ Usuario <@${targetId}> removido de los permisos de administración.`,
+                components: [],
+            });
+        }
+
+        // 🧪 Configurar Rol Tester: Menú de Selección de Rol
+        if (accion === 'permiso_set_rol_tester') {
+            const select = new RoleSelectMenuBuilder()
+                .setCustomId('admin:sel_rol_tester:admin')
+                .setPlaceholder('🧪 Selecciona el rol de Discord para los Testers...')
+                .setMinValues(1)
+                .setMaxValues(1);
+
+            return interaction.reply({
+                content: 'Elige el rol cuyos miembros podrán interactuar y probar el evento durante el modo mantenimiento:',
+                components: [new ActionRowBuilder().addComponents(select)],
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
+        if (accion === 'sel_rol_tester') {
+            await interaction.deferUpdate();
+            const roleId = interaction.values[0];
+            await ConfigEvento.findOneAndUpdate(
+                { guildId },
+                { $set: { rolTesterId: roleId } },
+                { upsert: true, new: true }
+            );
+
+            solicitarActualizacionAdminPanel(guildId);
+            await logAdmin(guildId, interaction.user.id, 'Rol Tester Asignado', `Rol: <@&${roleId}>`);
+
+            return interaction.editReply({
+                content: `✅ ¡Rol Tester asignado con éxito! Los miembros con el rol <@&${roleId}> ahora pueden probar La Cripta durante mantenimiento.`,
+                components: [],
+            });
+        }
+
+        if (accion === 'permiso_del_rol_tester') {
+            await interaction.deferUpdate();
+            await ConfigEvento.findOneAndUpdate(
+                { guildId },
+                { $set: { rolTesterId: null } }
+            );
+
+            solicitarActualizacionAdminPanel(guildId);
+            await logAdmin(guildId, interaction.user.id, 'Rol Tester Removido', 'Se ha eliminado el rol tester asignado.');
+
+            return interaction.editReply({
+                content: '✅ Rol Tester removido. Ahora solo los Administradores tienen acceso durante mantenimiento.',
+                components: [],
+            });
+        }
+
+        // 🧪 Gestión de Testers Usuarios
+        if (accion === 'permiso_add_tester_user') {
+            const select = new UserSelectMenuBuilder()
+                .setCustomId('admin:sel_add_tester_user:admin')
+                .setPlaceholder('🎯 Selecciona el usuario a asignar como tester...')
+                .setMinValues(1)
+                .setMaxValues(1);
+
+            return interaction.reply({
+                content: 'Elige al usuario que tendrá acceso para probar el evento durante el mantenimiento:',
+                components: [new ActionRowBuilder().addComponents(select)],
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
+        if (accion === 'sel_add_tester_user') {
+            await interaction.deferUpdate();
+            const targetId = interaction.values[0];
+            await ConfigEvento.findOneAndUpdate(
+                { guildId },
+                { $addToSet: { testersIds: targetId } },
+                { upsert: true, new: true }
+            );
+
+            solicitarActualizacionAdminPanel(guildId);
+            await logAdmin(guildId, interaction.user.id, 'Tester Usuario Asignado', `Usuario: <@${targetId}>`);
+
+            return interaction.editReply({
+                content: `✅ ¡Usuario <@${targetId}> asignado con éxito como Tester! Podrá interactuar y probar La Cripta durante mantenimiento.`,
+                components: [],
+            });
+        }
+
+        if (accion === 'permiso_del_tester_user') {
+            const config = await ConfigEvento.findOne({ guildId }).lean() || {};
+            if (!config.testersIds || config.testersIds.length === 0) {
+                return interaction.reply({
+                    content: '❌ No hay usuarios testers configurados actualmente para remover.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            const opciones = config.testersIds.map((uid) => {
+                const u = client.users.cache.get(uid);
+                return {
+                    label: `@${u ? u.tag : uid}`.slice(0, 100),
+                    value: uid,
+                    description: `ID: ${uid}`,
+                };
+            });
+
+            const select = new StringSelectMenuBuilder()
+                .setCustomId('admin:sel_del_tester_user:admin')
+                .setPlaceholder('🗑️ Selecciona el usuario tester a revocar...')
+                .addOptions(opciones);
+
+            return interaction.reply({
+                content: 'Selecciona al usuario que deseas remover de la lista de testers:',
+                components: [new ActionRowBuilder().addComponents(select)],
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
+        if (accion === 'sel_del_tester_user') {
+            await interaction.deferUpdate();
+            const targetId = interaction.values[0];
+            await ConfigEvento.findOneAndUpdate(
+                { guildId },
+                { $pull: { testersIds: targetId } },
+                { new: true }
+            );
+
+            solicitarActualizacionAdminPanel(guildId);
+            await logAdmin(guildId, interaction.user.id, 'Tester Usuario Revocado', `Usuario: <@${targetId}>`);
+
+            return interaction.editReply({
+                content: `✅ Usuario <@${targetId}> revocado de la lista de testers.`,
                 components: [],
             });
         }

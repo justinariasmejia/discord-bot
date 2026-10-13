@@ -50,19 +50,27 @@ async function construirPanelCripta(guildId) {
 
     let desc = '> *Bienvenido a la Cripta. Reúne huesos cazando, en duelos, apostando y chateando para conquistar el podio.*\n\n';
 
-    desc += '### 🏆 Tabla de Clasificación en Vivo (Top 10)\n';
-    desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-
-    if (topUsuarios.length === 0) {
-        desc += '*Las tumbas permanecen intactas... Sé el primer cazador en reclamar el podio.*\n';
+    if (config.modoTest) {
+        desc += '### 🛠️ Tabla de Clasificación (Top 10) • EN MANTENIMIENTO\n';
+        desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+        desc += '⚙️ **Las clasificaciones se encuentran en pausa técnica por mantenimiento.**\n';
+        desc += '🔒 *El Top 10 oficial se activará en vivo en cuanto La Cripta sea inaugurada.*\n';
+        desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
     } else {
-        topUsuarios.forEach((u, i) => {
-            const medalla = MEDALLAS[i] || `#${i + 1}`;
-            const racha = u.rachaDiaria > 0 ? ` • 🔥 \`${u.rachaDiaria}d\`` : '';
-            desc += `${medalla} <@${u.userId}> — **${formatoNum(u.huesos)}** 🦴${racha}\n`;
-        });
+        desc += '### 🏆 Tabla de Clasificación en Vivo (Top 10)\n';
+        desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+
+        if (topUsuarios.length === 0) {
+            desc += '*Las tumbas permanecen intactas... Sé el primer cazador en reclamar el podio.*\n';
+        } else {
+            topUsuarios.forEach((u, i) => {
+                const medalla = MEDALLAS[i] || `#${i + 1}`;
+                const racha = u.rachaDiaria > 0 ? ` • 🔥 \`${u.rachaDiaria}d\`` : '';
+                desc += `${medalla} <@${u.userId}> — **${formatoNum(u.huesos)}** 🦴${racha}\n`;
+            });
+        }
+        desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
     }
-    desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
 
     // Estado del Evento
     desc += '### ⚙️ Información de Temporada\n';
@@ -84,7 +92,9 @@ async function construirPanelCripta(guildId) {
     const embed = basePremium(`${EMOJIS.calabaza || '🎃'} La Cripta de los Huesos • Centro de Mando`, desc, COLORES.naranja);
     embed.setFooter({ text: '⚡ Ranking en tiempo real • 🎃 La Cripta de los Huesos' });
 
-    const interactuable = activo && !config.modoTest;
+    // En mantenimiento, los botones permanecen habilitados para que los testers y administradores
+    // puedan probar las funciones (los usuarios normales reciben un aviso efímero al interactuar)
+    const interactuable = activo;
 
     // Fila 1: Acciones Principales
     const fila1 = new ActionRowBuilder().addComponents(

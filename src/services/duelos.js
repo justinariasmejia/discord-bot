@@ -4,7 +4,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const Duelo = require('../models/Duelo');
 const Usuario = require('../models/Usuario');
 const { modificarHuesos, obtenerUsuario } = require('./economia');
-const { obtenerConfig, eventoActivo, estaEnBlacklist } = require('./evento');
+const { obtenerConfig, eventoActivo, estaEnBlacklist, esAdminOTester } = require('./evento');
 const { conBloqueo } = require('../utils/locks');
 const { base, COLORES, formatoNum } = require('../utils/embeds');
 const config = require('../data/config');
@@ -63,6 +63,11 @@ function filaDispararDuelo(dueloId) {
 async function crearDuelo(guildId, canalId, retadorId, rivalId, monto) {
     const confEvento = await obtenerConfig(guildId);
     if (!eventoActivo(confEvento)) return { ok: false, motivo: 'evento_cerrado' };
+    if (confEvento.modoTest) {
+        if (!esAdminOTester(retadorId, confEvento) || !esAdminOTester(rivalId, confEvento)) {
+            return { ok: false, motivo: 'modo_test_duelo' };
+        }
+    }
 
     if (estaEnBlacklist(retadorId, confEvento) || estaEnBlacklist(rivalId, confEvento)) {
         return { ok: false, motivo: 'blacklist' };

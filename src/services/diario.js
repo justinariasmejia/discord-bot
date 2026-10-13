@@ -10,10 +10,10 @@ const BASE = 50;
 const BONUS_POR_DIA = 15;
 const TOPE_RACHA = 7;                      // el bono deja de crecer al día 7 (máx. 140 huesos)
 
-async function reclamarDiario(userId, guildId) {
+async function reclamarDiario(userId, guildId, esTesterOAdmin = false) {
     const config = await obtenerConfig(guildId);
     if (!eventoActivo(config)) return { ok: false, motivo: 'evento_cerrado' };
-    if (config.modoTest) return { ok: false, motivo: 'modo_test' };
+    if (config.modoTest && !esTesterOAdmin) return { ok: false, motivo: 'modo_test' };
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const usuario = await obtenerUsuario(userId, guildId);

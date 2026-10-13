@@ -28,6 +28,12 @@ module.exports = {
             const res = await crearDuelo(interaction.guildId, interaction.channelId, interaction.user.id, rivalId, montoStr);
 
             if (!res.ok) {
+                if (res.motivo === 'modo_test_duelo') {
+                    return interaction.reply({
+                        content: '🛠️ **Modo Pruebas / Mantenimiento:** Durante el mantenimiento, solo los administradores y testers autorizados pueden batirse en duelos.',
+                        flags: MessageFlags.Ephemeral,
+                    });
+                }
                 if (res.motivo === 'monto_invalido') {
                     return interaction.reply({
                         content: `❌ Monto inválido. La apuesta mínima es de **${res.min}** huesos.`,

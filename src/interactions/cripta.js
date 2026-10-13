@@ -48,9 +48,10 @@ module.exports = {
             });
         }
 
-        const { obtenerConfig } = require('../services/evento');
+        const { obtenerConfig, esAdminOTester } = require('../services/evento');
         const conf = await obtenerConfig(interaction.guildId);
-        if (conf.modoTest) {
+        const esStaffOTester = esAdminOTester(interaction.member, conf);
+        if (conf.modoTest && !esStaffOTester) {
             const accionesBloqueadas = ['cazar', 'diario', 'apostar', 'duelo', 'sel_juego', 'sel_juego_btn', 'hub_cazar', 'hub_diario', 'hub_apostar', 'hub_duelo', 'hub_sel_duelo'];
             if (accionesBloqueadas.includes(accion)) {
                 return interaction.reply({
@@ -70,7 +71,7 @@ module.exports = {
         // ── 2. Cazar ──
         if (accion === 'cazar') {
             await interaction.deferUpdate();
-            const res = await cazar(duenoId, interaction.guildId);
+            const res = await cazar(duenoId, interaction.guildId, esStaffOTester);
 
             if (!res.ok) {
                 logCaza(interaction.guildId, duenoId, res).catch(() => null);
@@ -188,7 +189,7 @@ module.exports = {
         if (accion === 'hub_cazar') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             const userId = interaction.user.id;
-            const res = await cazar(userId, interaction.guildId);
+            const res = await cazar(userId, interaction.guildId, esStaffOTester);
 
             if (!res.ok) {
                 logCaza(interaction.guildId, userId, res).catch(() => null);
@@ -208,7 +209,7 @@ module.exports = {
         // 🎁 Reclamar Diario desde el panel maestro
         if (accion === 'hub_diario') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const res = await reclamarDiario(interaction.user.id, interaction.guildId);
+            const res = await reclamarDiario(interaction.user.id, interaction.guildId, esStaffOTester);
             if (res.ok) {
                 logDiario(interaction.guildId, interaction.user.id, res).catch(() => null);
             }

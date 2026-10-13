@@ -124,6 +124,35 @@ module.exports = {
                 .setDescription('Configura el rol que recibirá las alertas de eventos de Halloween')
                 .addRoleOption((opt) => opt.setName('rol').setDescription('Rol para las notificaciones').setRequired(true))
         )
+        // ── Rol de Testers de Modo Prueba ──
+        .addSubcommand((sub) =>
+            sub
+                .setName('rol_tester')
+                .setDescription('Configura el rol que tendrá permisos para testear durante mantenimiento')
+                .addRoleOption((opt) => opt.setName('rol').setDescription('Rol para los testers').setRequired(true))
+        )
+        // ── Gestión de Testers Individuales ──
+        .addSubcommand((sub) =>
+            sub
+                .setName('tester_usuario')
+                .setDescription('Añade o remueve a un usuario específico como tester durante mantenimiento')
+                .addStringOption((opt) =>
+                    opt
+                        .setName('accion')
+                        .setDescription('Añadir o remover tester')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: '➕ Añadir tester', value: 'add' },
+                            { name: '➖ Remover tester', value: 'remove' }
+                        )
+                )
+                .addUserOption((opt) =>
+                    opt
+                        .setName('usuario')
+                        .setDescription('Usuario a designar o revocar como tester')
+                        .setRequired(true)
+                )
+        )
         // ── Ver Configuración Actual ──
         .addSubcommand((sub) =>
             sub
@@ -147,6 +176,12 @@ module.exports = {
                             { name: '🌕 Eclipse Espectral (x2)', value: 'eclipse_2x' },
                             { name: '🎲 Oogie Boogie', value: 'oogie_boogie' }
                         )
+                )
+                .addUserOption((opt) =>
+                    opt
+                        .setName('usuario')
+                        .setDescription('Objetivo específico para Oogie Boogie (por defecto tú mismo)')
+                        .setRequired(false)
                 )
         )
         // ── Multiplicador ──
@@ -710,6 +745,53 @@ module.exports = {
             });
         }
 
+        if (sub === 'rol_tester') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const rol = interaction.options.getRole('rol');
+            await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { rolTesterId: rol.id } }, { upsert: true, new: true });
+            await logAdmin(guildId, interaction.user.id, 'Rol Tester Configurado', `Configurado: <@&${rol.id}>`);
+            const { solicitarActualizacionAdminPanel } = require('../services/panelAdmin');
+            solicitarActualizacionAdminPanel(guildId);
+            return interaction.editReply({
+                embeds: [basePremium('✅ Rol Tester Configurado', `Los miembros con el rol <@&${rol.id}> podrán participar e interactuar en La Cripta incluso cuando esté en pausa o mantenimiento.`, COLORES.verde)],
+            });
+        }
+
+        if (sub === 'tester_usuario') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const accion = interaction.options.getString('accion');
+            const targetUser = interaction.options.getUser('usuario');
+            const conf = await ConfigEvento.findOne({ guildId });
+            if (!conf) {
+                return interaction.editReply({ content: '❌ No hay configuración del evento para este servidor.' });
+            }
+
+            if (!conf.testersIds) conf.testersIds = [];
+
+            if (accion === 'add') {
+                if (conf.testersIds.includes(targetUser.id)) {
+                    return interaction.editReply({ content: `⚠️ <@${targetUser.id}> ya está en la lista de testers autorizados.` });
+                }
+                conf.testersIds.push(targetUser.id);
+                await conf.save();
+                await logAdmin(guildId, interaction.user.id, 'Tester Usuario Agregado', `Usuario: <@${targetUser.id}>`);
+                const { solicitarActualizacionAdminPanel } = require('../services/panelAdmin');
+                solicitarActualizacionAdminPanel(guildId);
+                return interaction.editReply({
+                    embeds: [basePremium('✅ Tester Usuario Asignado', `<@${targetUser.id}> ahora puede participar y probar La Cripta durante mantenimiento.`, COLORES.verde)],
+                });
+            } else {
+                conf.testersIds = conf.testersIds.filter(id => id !== targetUser.id);
+                await conf.save();
+                await logAdmin(guildId, interaction.user.id, 'Tester Usuario Removido', `Usuario: <@${targetUser.id}>`);
+                const { solicitarActualizacionAdminPanel } = require('../services/panelAdmin');
+                solicitarActualizacionAdminPanel(guildId);
+                return interaction.editReply({
+                    embeds: [basePremium('✅ Tester Usuario Revocado', `<@${targetUser.id}> ya no tiene permisos de tester durante mantenimiento.`, COLORES.rojo)],
+                });
+            }
+        }
+
         if (sub === 'canal_cumpleanos') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             const canal = interaction.options.getChannel('canal');
@@ -763,6 +845,8 @@ module.exports = {
                     { name: '━━━ 🧪 Modo de Pruebas ━━━', value: '\u200B', inline: false },
                     { name: '🧪 Modo Test', value: config?.modoTest ? '🟢 Activado' : '⚪ Desactivado', inline: true },
                     { name: '🔬 Canal de Pruebas', value: formatCanal(config?.canalTestId), inline: true },
+                    { name: '🧪 Rol Tester', value: config?.rolTesterId ? `<@&${config.rolTesterId}>` : '❌ No configurado', inline: true },
+                    { name: '🔬 Testers Asignados', value: (config?.testersIds && config.testersIds.length > 0) ? config.testersIds.map(id => `<@${id}>`).join(', ') : 'Ninguno', inline: true },
                     { name: '━━━ 📊 Estado del Evento ━━━', value: '\u200B', inline: false },
                     { name: '📌 Estado', value: config?.estado === 'activo' ? '🟢 Activo' : '🔴 Finalizado', inline: true },
                     { name: '⏳ Cierre', value: config?.fechaCierre ? `<t:${Math.floor(config.fechaCierre.getTime() / 1000)}:R>` : 'No definido', inline: true },
@@ -779,6 +863,7 @@ module.exports = {
         if (sub === 'evento') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             const tipo = interaction.options.getString('tipo');
+            const targetUser = interaction.options.getUser('usuario');
 
             const conf = await ConfigEvento.findOne({ guildId });
             const canalDestinoId = (conf?.modoTest && conf?.canalTestId) ? conf.canalTestId : conf?.canalEventosId;
@@ -786,14 +871,20 @@ module.exports = {
                 return interaction.editReply({ content: '⚠️ Primero configura el canal de eventos o el canal de pruebas: `/admin modo_test` o `/admin canal_eventos`.' });
             }
 
-            const res = await forzarEvento(guildId, client, tipo);
+            let victimaObjetivoId = null;
+            if (tipo === 'oogie_boogie') {
+                victimaObjetivoId = targetUser ? targetUser.id : interaction.user.id;
+            }
+
+            const res = await forzarEvento(guildId, client, tipo, victimaObjetivoId);
             if (!res) {
                 return interaction.editReply({ content: '❌ No se pudo disparar el evento.' });
             }
 
             const avisoTest = conf.modoTest ? ' *(🧪 Lanzado en Canal de Pruebas)*' : '';
-            await logAdmin(guildId, interaction.user.id, 'Evento Manual', `Evento **${tipo}** lanzado en <#${canalDestinoId}>${avisoTest}`);
-            const embed = basePremium('✅ Evento Disparado', `Evento **${tipo}** lanzado en <#${canalDestinoId}>.${avisoTest}`, COLORES.verde);
+            const detalleVictima = (tipo === 'oogie_boogie' && victimaObjetivoId) ? ` contra <@${victimaObjetivoId}>` : '';
+            await logAdmin(guildId, interaction.user.id, 'Evento Manual', `Evento **${tipo}** lanzado en <#${canalDestinoId}>${detalleVictima}${avisoTest}`);
+            const embed = basePremium('✅ Evento Disparado', `Evento **${tipo}** lanzado en <#${canalDestinoId}>${detalleVictima}.${avisoTest}`, COLORES.verde);
             return interaction.editReply({ embeds: [embed] });
         }
 

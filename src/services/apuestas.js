@@ -2,7 +2,7 @@
 // Lógica de negocio y resolución de juegos de apuestas con consumo de pociones.
 const Usuario = require('../models/Usuario');
 const { obtenerUsuario, modificarHuesos } = require('./economia');
-const { obtenerConfig, eventoActivo } = require('./evento');
+const { obtenerConfig, eventoActivo, esAdminOTester } = require('./evento');
 const { conBloqueo } = require('../utils/locks');
 const config = require('../data/config');
 
@@ -228,7 +228,7 @@ function calcularProbabilidad(probBase) {
 // ── 1. Cara o Cruz ──
 async function apostarCaraCruz(userId, guildId, monto, eleccion) {
     const confEvento = await obtenerConfig(guildId);
-    if (!eventoActivo(confEvento) || confEvento.modoTest) return { ok: false, motivo: 'evento_cerrado' };
+    if (!eventoActivo(confEvento) || (confEvento.modoTest && !esAdminOTester(userId, confEvento))) return { ok: false, motivo: 'evento_cerrado' };
 
     const cd = verificarCooldown(userId, 'cara_cruz');
     if (cd.enCooldown) return { ok: false, motivo: 'cooldown', restanteMs: cd.restanteMs };
@@ -445,7 +445,7 @@ function obtenerSimboloTragamonedas() {
 
 async function apostarTragamonedas(userId, guildId, monto) {
     const confEvento = await obtenerConfig(guildId);
-    if (!eventoActivo(confEvento) || confEvento.modoTest) return { ok: false, motivo: 'evento_cerrado' };
+    if (!eventoActivo(confEvento) || (confEvento.modoTest && !esAdminOTester(userId, confEvento))) return { ok: false, motivo: 'evento_cerrado' };
 
     const cd = verificarCooldown(userId, 'tragamonedas');
     if (cd.enCooldown) return { ok: false, motivo: 'cooldown', restanteMs: cd.restanteMs };

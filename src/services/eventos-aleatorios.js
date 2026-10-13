@@ -322,7 +322,7 @@ async function activarMultiplicadorGlobal(guildId, client, minutos = 30, factor 
 }
 
 // ── 5. APARICIÓN DE OOGIE BOOGIE (El Estafador de la Cripta) ──
-async function aparecerOogieBoogie(guildId, client, esForzado = false) {
+async function aparecerOogieBoogie(guildId, client, esForzado = false, userIdForzador = null) {
     const configGlobal = require('../data/config');
     const oogieCfg = configGlobal.OOGIE_BOOGIE;
     if (!oogieCfg?.HABILITADO) return null;
@@ -341,38 +341,53 @@ async function aparecerOogieBoogie(guildId, client, esForzado = false) {
         .limit(oogieCfg.TOP_CANDIDATOS || 10)
         .lean();
 
-    if (!topCandidatos || topCandidatos.length === 0) return null;
-
-    const totalHuesosTop = topCandidatos.reduce((sum, u) => sum + u.huesos, 0);
-    if (totalHuesosTop <= 0) return null;
-
-    // Selección ponderada por riqueza (mientras más huesos, mayor probabilidad matemática)
-    const numVictimas = Math.min(oogieCfg.MAX_VICTIMAS || 2, topCandidatos.length);
     const victimasSeleccionadas = [];
-    const pool = [...topCandidatos];
 
-    for (let i = 0; i < numVictimas && pool.length > 0; i++) {
-        const pesoTotalActual = pool.reduce((s, u) => s + u.huesos, 0);
-        let rand = Math.random() * pesoTotalActual;
-        let elegidoIndex = 0;
-
-        for (let j = 0; j < pool.length; j++) {
-            rand -= pool[j].huesos;
-            if (rand <= 0) {
-                elegidoIndex = j;
-                break;
-            }
+    // Si fue forzado con un objetivo específico (el admin o alguien que él decidió),
+    // desafiar ÚNICAMENTE a esa persona y no meter a víctimas no deseadas.
+    if (userIdForzador) {
+        const { obtenerUsuario } = require('./economia');
+        const usuarioVictima = await obtenerUsuario(userIdForzador, guildId);
+        if (usuarioVictima) {
+            const saldoVictima = Math.max(10, usuarioVictima.huesos);
+            const apuestaVictima = Math.max(10, Math.floor(saldoVictima * (oogieCfg.PORCENTAJE_APUESTA || 0.18)));
+            victimasSeleccionadas.push({
+                userId: userIdForzador,
+                huesos: usuarioVictima.huesos,
+                apuesta: apuestaVictima,
+                estado: 'pendiente',
+                resultado: null,
+            });
         }
+    } else {
+        // Modo aleatorio (aparición natural o forzado al azar):
+        // Selección ponderada por riqueza entre los más ricos del servidor
+        const pool = [...(topCandidatos || [])];
+        const maxVictimas = Math.min(oogieCfg.MAX_VICTIMAS || 2, pool.length);
 
-        const elegido = pool.splice(elegidoIndex, 1)[0];
-        const apuesta = Math.max(10, Math.floor(elegido.huesos * (oogieCfg.PORCENTAJE_APUESTA || 0.18)));
-        victimasSeleccionadas.push({
-            userId: elegido.userId,
-            huesos: elegido.huesos,
-            apuesta,
-            estado: 'pendiente', // 'pendiente', 'aceptado', 'huido', 'ignorado'
-            resultado: null,
-        });
+        while (victimasSeleccionadas.length < maxVictimas && pool.length > 0) {
+            const pesoTotalActual = pool.reduce((s, u) => s + u.huesos, 0);
+            let rand = Math.random() * (pesoTotalActual > 0 ? pesoTotalActual : 1);
+            let elegidoIndex = 0;
+
+            for (let j = 0; j < pool.length; j++) {
+                rand -= pool[j].huesos;
+                if (rand <= 0) {
+                    elegidoIndex = j;
+                    break;
+                }
+            }
+
+            const elegido = pool.splice(elegidoIndex, 1)[0];
+            const apuesta = Math.max(10, Math.floor(elegido.huesos * (oogieCfg.PORCENTAJE_APUESTA || 0.18)));
+            victimasSeleccionadas.push({
+                userId: elegido.userId,
+                huesos: elegido.huesos,
+                apuesta,
+                estado: 'pendiente',
+                resultado: null,
+            });
+        }
     }
 
     if (victimasSeleccionadas.length === 0) return null;
@@ -399,7 +414,17 @@ async function aparecerOogieBoogie(guildId, client, esForzado = false) {
         COLORES.rojo
     );
 
-    if (oogieCfg.GIF_APARICION_URL) {
+    const path = require('path');
+    const fs = require('fs');
+    const { AttachmentBuilder } = require('discord.js');
+    const rutaGifLocal = path.join(__dirname, '..', 'assets', 'oogie.gif');
+    const files = [];
+
+    if (fs.existsSync(rutaGifLocal)) {
+        const attachment = new AttachmentBuilder(rutaGifLocal, { name: 'oogie.gif' });
+        files.push(attachment);
+        embed.setImage('attachment://oogie.gif');
+    } else if (oogieCfg.GIF_APARICION_URL) {
         embed.setImage(oogieCfg.GIF_APARICION_URL);
     }
 
@@ -434,6 +459,7 @@ async function aparecerOogieBoogie(guildId, client, esForzado = false) {
     const mensaje = await canal.send({
         content: avisoNoti,
         embeds: [embed],
+        files,
         components: [fila],
     }).catch(() => null);
 
@@ -508,12 +534,12 @@ async function aparecerOogieBoogie(guildId, client, esForzado = false) {
 }
 
 // ── 6. DISPARADOR MANUAL / FORZADO (Admin) ──
-async function forzarEvento(guildId, client, tipoEvento) {
+async function forzarEvento(guildId, client, tipoEvento, userIdForzador = null) {
     if (tipoEvento === 'fantasma') return aparecerFantasma(guildId, client, true);
     if (tipoEvento === 'trivia') return lanzarTrivia(guildId, client, true);
     if (tipoEvento === 'cofre' || tipoEvento === 'huesos') return aparecerHuesos(guildId, client, true);
     if (tipoEvento === 'eclipse_2x') return activarMultiplicadorGlobal(guildId, client, 30, 2);
-    if (tipoEvento === 'oogie' || tipoEvento === 'oogie_boogie') return aparecerOogieBoogie(guildId, client, true);
+    if (tipoEvento === 'oogie' || tipoEvento === 'oogie_boogie') return aparecerOogieBoogie(guildId, client, true, userIdForzador);
     return null;
 }
 

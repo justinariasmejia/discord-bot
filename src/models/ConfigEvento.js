@@ -41,6 +41,8 @@ const configSchema = new Schema({
     // ── Modo de Pruebas (Test Mode) ──
     modoTest: { type: Boolean, default: false },
     canalTestId: { type: String, default: null },
+    rolTesterId: { type: String, default: null }, // Rol para testers durante mantenimiento / modoTest
+    testersIds: [{ type: String }], // IDs de usuarios testers individuales
 });
 
 module.exports = model('ConfigEvento', configSchema);

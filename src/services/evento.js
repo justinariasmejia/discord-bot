@@ -105,6 +105,20 @@ async function esAdminAsync(member, guildId = null) {
     return false;
 }
 
+function esTester(member, config = null) {
+    if (!member) return false;
+    const userId = typeof member === 'string' ? member : (member.id || member.user?.id);
+    if (config?.testersIds && config.testersIds.includes(userId)) return true;
+    if (config?.rolTesterId && typeof member !== 'string' && member.roles?.cache) {
+        if (member.roles.cache.has(config.rolTesterId)) return true;
+    }
+    return false;
+}
+
+function esAdminOTester(member, config = null) {
+    return esAdmin(member, config) || esTester(member, config);
+}
+
 function puedeInteractuarEvento(config, member, canalId = null) {
     if (!config) return { permitido: false, motivo: 'sin_config' };
     const userId = member?.id || member;
@@ -134,7 +148,7 @@ function puedeInteractuarEvento(config, member, canalId = null) {
 
     // 3. Verificación de Modo Test (Mantenimiento)
     if (config.modoTest) {
-        if (!esAdmin(member, config)) {
+        if (!esAdminOTester(member, config)) {
             return {
                 permitido: false,
                 motivo: 'modo_test',
@@ -171,6 +185,9 @@ module.exports = {
     multiplicadorActual,
     esAdmin,
     esAdminAsync,
+    esTester,
+    esAdminOTester,
     puedeInteractuarEvento,
     obtenerCanalApariciones,
 };
+

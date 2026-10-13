@@ -32,8 +32,9 @@ async function construirPanelAdmin(guildId) {
 
     desc += '### 🛠️ Estado del Sistema y Mantenimiento\n';
     desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-    desc += `• **Modo Mantenimiento (Test):** ${config.modoTest ? '🟢 **ACTIVADO** (Solo admins)' : '⚪ **DESACTIVADO** (Público)'}\n`;
+    desc += `• **Modo Mantenimiento (Test):** ${config.modoTest ? '🟢 **ACTIVADO** (Solo admins y testers)' : '⚪ **DESACTIVADO** (Público)'}\n`;
     desc += `• **Canal de Pruebas:** ${formatCanal(config.canalTestId)}\n`;
+    desc += `• **Rol Tester (Pruebas):** ${config.rolTesterId ? `<@&${config.rolTesterId}>` : '_Ninguno configurado_'}\n`;
     desc += `• **Temporada:** ${config.estado === 'activo' ? '🟢 Activa' : '🔴 Cerrada'}\n`;
     desc += `• **Multiplicador Global:** ${config.multiplicador > 1 ? `⚡ **x${config.multiplicador}**` : 'x1 (Normal)'}\n`;
     desc += `• **Cazadores Registrados:** \`${formatoNum(totalCazadores)}\` | **Transacciones:** \`${formatoNum(totalTransacciones)}\`\n`;
@@ -60,6 +61,11 @@ async function construirPanelAdmin(guildId) {
     desc += `• **Super Administrador:** <@1504614011482935358> (Control Maestro Absoluto)\n`;
     desc += `• **Roles autorizados:** ${rolesList}\n`;
     desc += `• **Usuarios autorizados:** ${usuariosList}\n`;
+    const testersUsersList = (config.testersIds && config.testersIds.length > 0)
+        ? config.testersIds.map(id => `<@${id}>`).join(', ')
+        : '_Ninguno asignado_';
+    desc += `• **Rol Tester (Modo Pruebas):** ${config.rolTesterId ? `<@&${config.rolTesterId}>` : '_Ninguno configurado_'}\n`;
+    desc += `• **Usuarios Testers:** ${testersUsersList}\n`;
     desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
 
     const blacklistRolesList = (config.blacklistRolesIds && config.blacklistRolesIds.length > 0)

@@ -32,13 +32,35 @@ async function modificarHuesos(userId, guildId, delta, tipo, detalle = '') {
     delta = Math.trunc(delta);
     if (!Number.isFinite(delta) || delta === 0) throw new Error('Monto inválido');
 
-    // Salvaguarda absoluta: durante modoTest / mantenimiento, ningún proceso automático puede tocar los huesos.
-    // Todos los cazadores se mantienen congelados en 100 huesos hasta que el admin active el evento general.
-    if (!['admin_dar', 'admin_quitar', 'admin_set', 'bienvenida'].includes(tipo)) {
+    // Salvaguarda: durante modoTest / mantenimiento, los procesos automáticos no tocan huesos de usuarios normales,
+    // pero los Administradores y Testers pueden realizar todas las operaciones para probar La Cripta.
+    const esTipoAdminDirecto = ['admin_dar', 'admin_quitar', 'admin_set', 'bienvenida'].includes(tipo);
+    if (!esTipoAdminDirecto) {
         const ConfigEvento = require('../models/ConfigEvento');
         const config = await ConfigEvento.findOne({ guildId }).lean();
         if (config?.modoTest) {
-            return null;
+            const { esSuperAdmin } = require('../utils/permisos');
+            const esAdminUser = esSuperAdmin(userId) ||
+                (config.usuariosAdminIds && config.usuariosAdminIds.includes(userId)) ||
+                (config.adminsIds && config.adminsIds.includes(userId)) ||
+                (config.testersIds && config.testersIds.includes(userId));
+
+            let tieneRolPermitido = false;
+            if (!esAdminUser && (config.rolTesterId || (config.rolesAdminIds && config.rolesAdminIds.length > 0))) {
+                try {
+                    const { client } = require('../index');
+                    const guild = client?.guilds?.cache?.get(guildId);
+                    const member = guild?.members?.cache?.get(userId);
+                    if (member) {
+                        if (config.rolTesterId && member.roles.cache.has(config.rolTesterId)) tieneRolPermitido = true;
+                        if (config.rolesAdminIds?.some((rId) => member.roles.cache.has(rId))) tieneRolPermitido = true;
+                    }
+                } catch {}
+            }
+
+            if (!esAdminUser && !tieneRolPermitido) {
+                return null;
+            }
         }
     }
 

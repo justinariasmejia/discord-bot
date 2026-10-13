@@ -157,7 +157,7 @@ module.exports = {
         SILENCIO_HUIR_MS: 30 * 60 * 1000,    // 30 min sin apostar ni duelos tras huir
         SILENCIO_IGNORAR_MS: 45 * 60 * 1000, // 45 min sin apostar ni duelos tras ignorar
         MULTIPLICADOR_GANANCIA: 1.45,        // Si el cazador vence a las trampas: recupera apuesta + 45% neto
-        GIF_APARICION_URL: 'https://static.klipy.com/ii/4e7bea9f7a3371424e6c16ebc93252fe/3e/f5/DFkxNRYtOGggcLUs20aG.gif', // GIF de aparición de Oogie Boogie
+        GIF_APARICION_URL: 'attachment://oogie.gif', // GIF local permanente empaquetado como archivo adjunto
     },
 };
 
