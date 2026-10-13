@@ -396,8 +396,13 @@ module.exports = {
                     }, TIEMPO_VISIBILIDAD_MENSAJE_MS);
                 }
 
-                // Si todos respondieron, retirar botones del mensaje original
+                // Borrar de inmediato el mensaje inicial de Oogie Boogie
                 if (ev.reclamado) {
+                    await interaction.message?.delete().catch(async () => {
+                        const mId = ev.mensajeId || interaction.message?.id;
+                        if (targetCanal && mId) await targetCanal.messages.delete(mId).catch(() => null);
+                    });
+                } else {
                     await interaction.message?.edit({ components: [] }).catch(() => null);
                 }
                 return;
@@ -517,8 +522,13 @@ module.exports = {
                     }, TIEMPO_VISIBILIDAD_MENSAJE_MS);
                 }
 
-                // Si todas las víctimas respondieron, desactivar botones
+                // Borrar de inmediato el mensaje inicial de Oogie Boogie
                 if (ev.reclamado) {
+                    await interaction.message?.delete().catch(async () => {
+                        const mId = ev.mensajeId || interaction.message?.id;
+                        if (targetCanal && mId) await targetCanal.messages.delete(mId).catch(() => null);
+                    });
+                } else {
                     await interaction.message?.edit({ components: [] }).catch(() => null);
                 }
                 return;

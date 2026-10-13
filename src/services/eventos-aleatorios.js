@@ -504,27 +504,29 @@ async function aparecerOogieBoogie(guildId, client, esForzado = false, userIdFor
             const { solicitarActualizacionCripta } = require('./canalCripta');
             solicitarActualizacionCripta(guildId);
 
+            // Borrar de inmediato el mensaje inicial con el GIF
+            await eliminarMensajeSeguro(canal, mensaje.id, mensaje);
+
             if (huboIgnorados) {
                 let textoIgnorados = 'El tiempo expiró y los siguientes cazadores no se atrevieron a responder:\n\n';
                 for (const ig of ignoradosList) {
                     textoIgnorados += `• <@${ig.userId}> perdió **-${formatoNum(ig.penalizacion)}** huesos y quedó silenciado de apuestas y duelos por 45 minutos.\n`;
                 }
-                textoIgnorados += '\n*"¡¡Jajaja!! ¡Nadie ignora a Oogie Boogie sin pagar el tributo!"*\n\n_Este mensaje desaparecerá en breve._';
+                textoIgnorados += '\n*"¡¡Jajaja!! ¡Nadie ignora a Oogie Boogie sin pagar el tributo!"*';
 
-                const embedExpirado = base(
+                const embedExpirado = basePremium(
                     '⏳ Tiempo Agotado — La Ira de Oogie Boogie',
                     textoIgnorados,
-                    COLORES.negro
+                    COLORES.rojo
                 );
 
-                await mensaje.edit({ embeds: [embedExpirado], components: [] }).catch(() => null);
-            } else {
-                await mensaje.edit({ components: [] }).catch(() => null);
+                const msgExp = await canal.send({ embeds: [embedExpirado] }).catch(() => null);
+                if (msgExp) {
+                    setTimeout(() => {
+                        msgExp.delete().catch(() => null);
+                    }, 45000);
+                }
             }
-
-            setTimeout(async () => {
-                await eliminarMensajeSeguro(canal, mensaje.id, mensaje);
-            }, 15000);
         } catch (err) {
             console.error('⚠️ Error al resolver timeout de Oogie Boogie:', err);
         }
