@@ -43,7 +43,7 @@ async function modificarHuesos(userId, guildId, delta, tipo, detalle = '') {
             if (usuarioActual && (usuarioActual.huesosPreTest === null || usuarioActual.huesosPreTest === undefined)) {
                 await Usuario.updateOne({ userId, guildId }, { $set: { huesosPreTest: usuarioActual.huesos } });
             }
-            const { esSuperAdmin } = require('../utils/permisos');
+            const { esSuperAdmin } = require('./evento');
             const esAdminUser = esSuperAdmin(userId) ||
                 (config.usuariosAdminIds && config.usuariosAdminIds.includes(userId)) ||
                 (config.adminsIds && config.adminsIds.includes(userId)) ||
