@@ -57,14 +57,14 @@ function limpiarTextoParaVoz(textoBruto) {
  */
 function limpiarNombreParaVoz(nombre) {
     if (!nombre) return '';
-    const limpio = nombre
-        .replace(/<a?:([a-zA-Z0-9_]+):\d+>/g, '$1')
-        .replace(/[\p{Extended_Pictographic}]/gu, '')
-        .replace(/[^\p{L}\p{N}\s]/gu, '')
+    let limpio = String(nombre)
+        .replace(/<a?:([a-zA-Z0-9_]+):\d+>/g, '$1') // emojis custom discord
+        .replace(/[\p{Extended_Pictographic}]/gu, '') // emojis unicode
+        .replace(/[^\p{L}\p{N}\s_.-]/gu, '') // preservar letras, números, acentos y signos legibles
         .replace(/\s+/g, ' ')
         .trim();
 
-    return limpio || nombre.slice(0, 20) || 'Usuario';
+    return limpio || String(nombre).slice(0, 20) || 'Usuario';
 }
 
 /**
@@ -287,12 +287,14 @@ async function procesarSiguienteEnCola(guildId) {
         if (esSeguido) {
             frase = item.texto;
         } else {
-            frase = `${item.autorNombre} dice: ${item.texto}`;
+            frase = `${item.autorNombre} dice, ${item.texto}`;
         }
 
         sesion.ultimoAutorId = item.autorId;
         sesion.ultimoTiempoMensaje = Date.now();
     }
+
+    console.log(`[TTS] 🗣️ [${guildId}] Reproduciendo: "${frase}" (Autor: "${item.autorNombre || 'Sistema'}")`);
 
     const node = nodoDisponible();
 
@@ -325,7 +327,7 @@ async function procesarSiguienteEnCola(guildId) {
  * Retorna true si el mensaje fue leído por TTS.
  */
 async function procesarMensajeTTS(message, client) {
-    if (!message.guild || message.author.bot) return false;
+    if (!message.guild || message.author?.bot) return false;
 
     const guildId = message.guild.id;
     const sesion = sesionesTTS.get(guildId);
@@ -344,8 +346,12 @@ async function procesarMensajeTTS(message, client) {
     // Ignorar comandos habituales de bots
     if (['!', '/', '-', '.', '?'].includes(contenido[0])) return false;
 
-    const autorNombre = message.member?.displayName || message.author.username;
-    const autorId = message.author.id;
+    const autorNombre = message.member?.displayName || 
+                        message.author?.globalName || 
+                        message.author?.displayName || 
+                        message.author?.username || 
+                        'Usuario';
+    const autorId = message.author?.id || 'anonimo';
     const encolado = encolarTexto(guildId, contenido, autorId, autorNombre, false);
 
     return Boolean(encolado);
