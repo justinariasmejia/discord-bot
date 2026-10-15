@@ -275,16 +275,14 @@ async function procesarSiguienteEnCola(guildId) {
 
     let frase = '';
 
-    if (item.esSistema || !sesion.incluirNombre) {
+    if (item.esSistema) {
         frase = item.texto;
-        if (item.esSistema) {
-            sesion.ultimoAutorId = null;
-        }
+        sesion.ultimoAutorId = null;
     } else {
         const esMismoAutor = Boolean(sesion.ultimoAutorId && sesion.ultimoAutorId === item.autorId);
         const tiempoPasado = Date.now() - (sesion.ultimoTiempoMensaje || 0);
-        // Si la misma persona escribe de manera seguida en menos de 20 segundos sin interrupción de nadie más
-        const esSeguido = esMismoAutor && tiempoPasado < 20000;
+        // Continuidad: solo si el mismo usuario escribe de inmediato en menos de 8 segundos sin interrupción
+        const esSeguido = esMismoAutor && tiempoPasado < 8000;
 
         if (esSeguido) {
             frase = item.texto;

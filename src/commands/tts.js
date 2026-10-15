@@ -87,13 +87,36 @@ module.exports = {
         .addSubcommand((sub) =>
             sub
                 .setName('estado')
-                .setDescription('Verifica si el lector de voz está activo y en qué canal')
+                .setDescription('Verifica si el lector de voz está activo y en qué versión')
+        )
+        // ── Subcomando: Reiniciar ──
+        .addSubcommand((sub) =>
+            sub
+                .setName('reiniciar')
+                .setDescription('🔄 Reinicia el proceso del bot para aplicar cambios de código recientes')
         ),
 
     async ejecutar(interaction, client) {
         const sub = interaction.options.getSubcommand();
         const guildId = interaction.guildId;
         const canalVoz = interaction.member?.voice?.channel;
+
+        // ── 0. REINICIAR BOT ──
+        if (sub === 'reiniciar') {
+            await interaction.reply({
+                embeds: [basePremium(
+                    '🔄 Reiniciando Bot',
+                    'El bot se está reiniciando para recargar la última versión del código.\nEstará listo en unos segundos.',
+                    COLORES.morado
+                )],
+                flags: MessageFlags.Ephemeral,
+            });
+
+            setTimeout(() => {
+                process.exit(0);
+            }, 800);
+            return;
+        }
 
         // ── 1. ACTIVAR TTS ──
         if (sub === 'activar') {
@@ -123,7 +146,8 @@ module.exports = {
                     `El bot se ha unido a **${canalVoz.name}** y leerá en voz alta todo lo que escriban en el chat.\n\n` +
                     `• 🎙️ **Canal de Voz:** <#${canalVoz.id}>\n` +
                     `• 🌐 **Idioma / Acento:** \`${IDIOMAS_SOPORTADOS[idioma] || idioma}\`\n` +
-                    `• 👤 **Decir autor:** ${incluirNombre ? '✅ Activado ("Usuario dice: ...")' : '❌ Desactivado (Solo el texto)'}\n` +
+                    `• 👤 **Decir autor:** ✅ Activado ("Usuario dice: ...")\n` +
+                    `• ⚡ **Versión TTS:** \`v2.5 (Continuidad Inteligente)\`\n` +
                     `• ⏱️ **Auto-desconexión:** Se desconectará automáticamente si pasa 5 minutos sin actividad.\n\n` +
                     `💡 *¡Solo escribe en este chat y el bot lo pronunciará en llamada! Para desconectarlo usa \`/tts desactivar\`.*`,
                     COLORES.verde
@@ -253,6 +277,7 @@ module.exports = {
                 `• 💬 **Canal de Texto:** <#${estado.canalTextoId}>\n` +
                 `• 🌐 **Idioma:** \`${estado.idiomaNombre}\`\n` +
                 `• 👤 **Decir Autor:** ${estado.incluirNombre ? 'Sí' : 'No'}\n` +
+                `• ⚡ **Versión:** \`v2.5 (Continuidad Inteligente)\`\n` +
                 `• 📋 **Mensajes en cola:** \`${estado.colaLength}\`\n` +
                 `• 🔊 **Hablando ahora:** ${estado.hablando ? 'Sí' : 'En espera'}`,
                 COLORES.verde
