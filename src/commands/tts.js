@@ -147,7 +147,7 @@ module.exports = {
                     `• 🎙️ **Canal de Voz:** <#${canalVoz.id}>\n` +
                     `• 🌐 **Idioma / Acento:** \`${IDIOMAS_SOPORTADOS[idioma] || idioma}\`\n` +
                     `• 👤 **Decir autor:** ✅ Activado ("Usuario dice: ...")\n` +
-                    `• ⚡ **Versión TTS:** \`v2.5 (Continuidad Inteligente)\`\n` +
+                    `• ⚡ **Versión TTS:** \`v3.0 (Pronunciación Mejorada + Sin Roles)\`\n` +
                     `• ⏱️ **Auto-desconexión:** Se desconectará automáticamente si pasa 5 minutos sin actividad.\n\n` +
                     `💡 *¡Solo escribe en este chat y el bot lo pronunciará en llamada! Para desconectarlo usa \`/tts desactivar\`.*`,
                     COLORES.verde
@@ -277,7 +277,7 @@ module.exports = {
                 `• 💬 **Canal de Texto:** <#${estado.canalTextoId}>\n` +
                 `• 🌐 **Idioma:** \`${estado.idiomaNombre}\`\n` +
                 `• 👤 **Decir Autor:** ${estado.incluirNombre ? 'Sí' : 'No'}\n` +
-                `• ⚡ **Versión:** \`v2.5 (Continuidad Inteligente)\`\n` +
+                `• ⚡ **Versión:** \`v3.0 (Pronunciación Mejorada + Sin Roles)\`\n` +
                 `• 📋 **Mensajes en cola:** \`${estado.colaLength}\`\n` +
                 `• 🔊 **Hablando ahora:** ${estado.hablando ? 'Sí' : 'En espera'}`,
                 COLORES.verde

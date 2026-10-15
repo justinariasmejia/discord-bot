@@ -19,6 +19,39 @@ const IDIOMAS_SOPORTADOS = {
 // Map de sesiones activas: guildId -> Session
 const sesionesTTS = new Map();
 
+const MAPA_FUENTES_DECORATIVAS = {
+    // Small caps minúsculas IPA/fonética (letras que usan en Discord como ɢ, ᴜ, ᴋ, ᴀ, ᴡ, ɪ)
+    'ᴀ': 'a', 'ʙ': 'b', 'ᴄ': 'c', 'ᴅ': 'd', 'ᴇ': 'e', 'ꜰ': 'f', 'ɢ': 'g', 'ʜ': 'h',
+    'ɪ': 'i', 'ᴊ': 'j', 'ᴋ': 'k', 'ʟ': 'l', 'ᴍ': 'm', 'ɴ': 'n', 'ᴏ': 'o', 'ᴘ': 'p',
+    'ꞯ': 'q', 'ʀ': 'r', 'ꜱ': 's', 'ᴛ': 't', 'ᴜ': 'u', 'ᴠ': 'v', 'ᴡ': 'w', 'ʏ': 'y', 'ᴢ': 'z',
+    // Small caps mayúsculas y superíndices
+    'ᴬ': 'A', 'ᴮ': 'B', 'ᴰ': 'D', 'ᴱ': 'E', 'ᴳ': 'G', 'ᴴ': 'H', 'ᴵ': 'I', 'ᴶ': 'J',
+    'ᴷ': 'K', 'ᴸ': 'L', 'ᴹ': 'M', 'ᴺ': 'N', 'ᴼ': 'O', 'ᴾ': 'P', 'ᴿ': 'R', 'ᵀ': 'T',
+    'ᵁ': 'U', 'ᵂ': 'W', 'ᵃ': 'a', 'ᵇ': 'b', 'ᶜ': 'c', 'ᵈ': 'd', 'ᵉ': 'e', 'ᶠ': 'f',
+    'ᵍ': 'g', 'ʰ': 'h', 'ⁱ': 'i', 'ʲ': 'j', 'ᵏ': 'k', 'ˡ': 'l', 'ᵐ': 'm', 'ⁿ': 'n',
+    'ᵒ': 'o', 'ᵖ': 'p', 'ʳ': 'r', 'ˢ': 's', 'ᵗ': 't', 'ᵘ': 'u', 'ᵛ': 'v', 'ʷ': 'w',
+    'ˣ': 'x', 'ʸ': 'y', 'ᶻ': 'z',
+    // Símbolos y letras tachadas o con barra
+    'Ø': 'O', 'ø': 'o',
+    '✟': '', '†': '', '‡': '', '•': '', '★': '', '☆': '', '༺': '', '༻': '',
+    '【': '', '】': '', '『': '', '』': '', '「': '', '」': '', '│': '', '┃': '', '|': ' ',
+    '~': '', '—': '', '–': '', '✧': '', '✦': '', '❖': '', '♠': '', '♣': '', '♥': '', '♦': '',
+};
+
+/**
+ * Normaliza fuentes decorativas, letras góticas, cursivas, negritas y small caps
+ * para que Google TTS pueda pronunciarlas con total claridad en lugar de trabarse o silenciarse.
+ */
+function normalizarFuentesDecorativas(texto) {
+    if (!texto) return '';
+    const nfkd = texto.normalize('NFKD');
+    let res = '';
+    for (const ch of nfkd) {
+        res += MAPA_FUENTES_DECORATIVAS[ch] !== undefined ? MAPA_FUENTES_DECORATIVAS[ch] : ch;
+    }
+    return res;
+}
+
 /**
  * Limpia y normaliza el texto para que suene natural al hablar y no se preste a trolleos/spam.
  */
@@ -38,13 +71,16 @@ function limpiarTextoParaVoz(textoBruto) {
     // 3. Reemplazar emojis personalizados <a:nombre:id> o <:nombre:id> por el nombre
     texto = texto.replace(/<a?:([a-zA-Z0-9_]+):\d+>/g, '$1');
 
-    // 4. Limpiar caracteres repetidos excesivos (ej: "holaaaaaaa" -> "holaaa")
+    // 4. Normalizar fuentes decorativas
+    texto = normalizarFuentesDecorativas(texto);
+
+    // 5. Limpiar caracteres repetidos excesivos (ej: "holaaaaaaa" -> "holaaa")
     texto = texto.replace(/(.)\1{4,}/g, '$1$1$1');
 
-    // 5. Quitar saltos de línea múltiples
+    // 6. Quitar saltos de línea múltiples
     texto = texto.replace(/\n+/g, ' ').trim();
 
-    // 6. Recortar a máximo 200 caracteres para evitar spam
+    // 7. Recortar a máximo 200 caracteres para evitar spam
     if (texto.length > 200) {
         texto = texto.slice(0, 197) + '...';
     }
@@ -53,18 +89,36 @@ function limpiarTextoParaVoz(textoBruto) {
 }
 
 /**
- * Limpia el nombre del autor para que el TTS lo pronuncie con fluidez, sin emojis ni símbolos raros.
+ * Limpia y normaliza el nombre del autor para que el TTS lo pronuncie perfecto en voz,
+ * sin importar si tiene fuentes estilizadas (small caps), emojis o símbolos.
+ * Filtra automáticamente prefijos/sufijos de roles o rangos de servidor.
  */
 function limpiarNombreParaVoz(nombre) {
     if (!nombre) return '';
-    let limpio = String(nombre)
-        .replace(/<a?:([a-zA-Z0-9_]+):\d+>/g, '$1') // emojis custom discord
-        .replace(/[\p{Extended_Pictographic}]/gu, '') // emojis unicode
-        .replace(/[^\p{L}\p{N}\s_.-]/gu, '') // preservar letras, números, acentos y signos legibles
-        .replace(/\s+/g, ' ')
-        .trim();
 
-    return limpio || String(nombre).slice(0, 20) || 'Usuario';
+    let limpio = String(nombre);
+
+    // 1. Quitar emojis custom de discord <:nombre:id>
+    limpio = limpio.replace(/<a?:([a-zA-Z0-9_]+):\d+>/g, ' ');
+
+    // 2. Normalizar fuentes decorativas (small caps, letras cursivas, negritas, etc.)
+    limpio = normalizarFuentesDecorativas(limpio);
+
+    // 3. Quitar prefijos y sufijos de roles, rangos o tags (ej: [Staff], [Zero], (VIP), | ZERO, etc.)
+    limpio = limpio.replace(/^\[[^\]]+\]\s*/g, '');
+    limpio = limpio.replace(/\s*\[[^\]]+\]$/g, '');
+    limpio = limpio.replace(/^\([^\)]+\)\s*/g, '');
+    limpio = limpio.replace(/\s*\([^\)]+\)$/g, '');
+    limpio = limpio.replace(/\s*\|\s*.*$/g, '');
+
+    // 4. Quitar emojis unicode de los nombres para dejar únicamente la pronunciación del nombre
+    limpio = limpio.replace(/[\p{Extended_Pictographic}]/gu, '');
+
+    // 5. Quitar símbolos que no sean letras o números
+    limpio = limpio.replace(/[^\p{L}\p{N}\s_.-]/gu, ' ');
+    limpio = limpio.replace(/\s+/g, ' ').trim();
+
+    return limpio;
 }
 
 /**
@@ -156,11 +210,6 @@ async function activarTTS({ guildId, canalVozId, canalTextoId, idioma = 'es', in
     });
 
     sesionesTTS.set(guildId, sesion);
-
-    // Saludo inicial breve para confirmar que el bot está activo en llamada
-    setTimeout(() => {
-        encolarTexto(guildId, 'Lector de voz activado.', null, null, true);
-    }, 400);
 
     return sesion;
 }
@@ -346,11 +395,18 @@ async function procesarMensajeTTS(message, client) {
     // Ignorar comandos habituales de bots
     if (['!', '/', '-', '.', '?'].includes(contenido[0])) return false;
 
-    const autorNombre = message.member?.displayName || 
-                        message.author?.globalName || 
-                        message.author?.displayName || 
-                        message.author?.username || 
-                        'Usuario';
+    // Resolver nombre del autor: displayName -> globalName -> username -> Usuario
+    let nombreCandidato = limpiarNombreParaVoz(message.member?.displayName);
+    if (!nombreCandidato || !/[a-zA-Z0-9]/.test(nombreCandidato)) {
+        nombreCandidato = limpiarNombreParaVoz(message.author?.globalName);
+    }
+    if (!nombreCandidato || !/[a-zA-Z0-9]/.test(nombreCandidato)) {
+        nombreCandidato = limpiarNombreParaVoz(message.author?.displayName);
+    }
+    if (!nombreCandidato || !/[a-zA-Z0-9]/.test(nombreCandidato)) {
+        nombreCandidato = limpiarNombreParaVoz(message.author?.username);
+    }
+    const autorNombre = nombreCandidato || 'Usuario';
     const autorId = message.author?.id || 'anonimo';
     const encolado = encolarTexto(guildId, contenido, autorId, autorNombre, false);
 
