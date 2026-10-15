@@ -191,7 +191,7 @@ module.exports = {
             }
 
             const autor = interaction.member?.displayName || interaction.user.username;
-            encolarTexto(guildId, texto, autor);
+            encolarTexto(guildId, texto, interaction.user.id, autor);
 
             return interaction.editReply({
                 embeds: [basePremium(

@@ -53,11 +53,27 @@ function limpiarTextoParaVoz(textoBruto) {
 }
 
 /**
+ * Limpia el nombre del autor para que el TTS lo pronuncie con fluidez, sin emojis ni símbolos raros.
+ */
+function limpiarNombreParaVoz(nombre) {
+    if (!nombre) return '';
+    const limpio = nombre
+        .replace(/<a?:([a-zA-Z0-9_]+):\d+>/g, '$1')
+        .replace(/[\p{Extended_Pictographic}]/gu, '')
+        .replace(/[^\p{L}\p{N}\s]/gu, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    return limpio || nombre.slice(0, 20) || 'Usuario';
+}
+
+/**
  * Genera la URL de audio directo de Google TTS.
  */
 function generarUrlTTS(frase, idioma = 'es') {
     const lang = IDIOMAS_SOPORTADOS[idioma] ? idioma : 'es';
-    return `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(frase)}`;
+    const fraseSegura = frase.length > 250 ? frase.slice(0, 247) + '...' : frase;
+    return `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(fraseSegura)}`;
 }
 
 /**
@@ -108,6 +124,8 @@ async function activarTTS({ guildId, canalVozId, canalTextoId, idioma = 'es', in
         hablando: false,
         player,
         timeoutInactividad: null,
+        ultimoAutorId: null,
+        ultimoTiempoMensaje: 0,
         client,
     };
 
@@ -141,7 +159,7 @@ async function activarTTS({ guildId, canalVozId, canalTextoId, idioma = 'es', in
 
     // Saludo inicial breve para confirmar que el bot está activo en llamada
     setTimeout(() => {
-        encolarTexto(guildId, 'Lector de voz activado.', null, true);
+        encolarTexto(guildId, 'Lector de voz activado.', null, null, true);
     }, 400);
 
     return sesion;
@@ -160,6 +178,8 @@ function desactivarTTS(guildId, motivo = '') {
 
     sesion.cola = [];
     sesion.hablando = false;
+    sesion.ultimoAutorId = null;
+    sesion.ultimoTiempoMensaje = 0;
 
     const shoukaku = getShoukaku();
     if (shoukaku) {
@@ -180,7 +200,7 @@ function desactivarTTS(guildId, motivo = '') {
 /**
  * Agrega un mensaje a la cola de reproducción del TTS.
  */
-function encolarTexto(guildId, textoOriginal, autor = null, esSistema = false) {
+function encolarTexto(guildId, textoOriginal, autorInfo = null, nombreOpcional = null, esSistema = false) {
     const sesion = sesionesTTS.get(guildId);
     if (!sesion) return false;
 
@@ -193,14 +213,33 @@ function encolarTexto(guildId, textoOriginal, autor = null, esSistema = false) {
         sesion.timeoutInactividad = null;
     }
 
-    let fraseFinal = '';
-    if (esSistema || !sesion.incluirNombre || !autor) {
-        fraseFinal = textoLimpio;
-    } else {
-        fraseFinal = `${autor} dice: ${textoLimpio}`;
+    let autorId = null;
+    let autorNombre = null;
+
+    if (typeof autorInfo === 'object' && autorInfo !== null) {
+        autorId = autorInfo.id || null;
+        autorNombre = autorInfo.displayName || autorInfo.username || autorInfo.name || null;
+    } else if (typeof autorInfo === 'string') {
+        if (nombreOpcional && typeof nombreOpcional === 'string') {
+            autorId = autorInfo;
+            autorNombre = nombreOpcional;
+        } else {
+            autorId = autorInfo;
+            autorNombre = autorInfo;
+        }
     }
 
-    sesion.cola.push(fraseFinal);
+    if (typeof nombreOpcional === 'boolean') {
+        esSistema = nombreOpcional;
+    }
+
+    sesion.cola.push({
+        texto: textoLimpio,
+        autorId,
+        autorNombre: limpiarNombreParaVoz(autorNombre),
+        esSistema: Boolean(esSistema),
+        timestamp: Date.now(),
+    });
 
     if (!sesion.hablando) {
         procesarSiguienteEnCola(guildId).catch(() => {});
@@ -229,7 +268,32 @@ async function procesarSiguienteEnCola(guildId) {
         return;
     }
 
-    const frase = sesion.cola.shift();
+    const item = sesion.cola.shift();
+    if (!item) return;
+
+    let frase = '';
+
+    if (item.esSistema || !sesion.incluirNombre || !item.autorNombre) {
+        frase = item.texto;
+        if (item.esSistema) {
+            sesion.ultimoAutorId = null;
+        }
+    } else {
+        const esMismoAutor = Boolean(sesion.ultimoAutorId && sesion.ultimoAutorId === item.autorId);
+        const tiempoPasado = Date.now() - (sesion.ultimoTiempoMensaje || 0);
+        // Si la misma persona escribe de manera seguida sin interrupción de nadie más (dentro de 60s)
+        const esSeguido = esMismoAutor && tiempoPasado < 60000;
+
+        if (esSeguido) {
+            frase = item.texto;
+        } else {
+            frase = `${item.autorNombre} dice: ${item.texto}`;
+        }
+
+        sesion.ultimoAutorId = item.autorId;
+        sesion.ultimoTiempoMensaje = Date.now();
+    }
+
     const node = nodoDisponible();
 
     if (!node || !sesion.player) {
@@ -280,16 +344,11 @@ async function procesarMensajeTTS(message, client) {
     // Ignorar comandos habituales de bots
     if (['!', '/', '-', '.', '?'].includes(contenido[0])) return false;
 
-    const autor = message.member?.displayName || message.author.username;
-    const encolado = encolarTexto(guildId, contenido, autor);
+    const autorNombre = message.member?.displayName || message.author.username;
+    const autorId = message.author.id;
+    const encolado = encolarTexto(guildId, contenido, autorId, autorNombre, false);
 
-    if (encolado) {
-        // Reacción visual sutil para que el usuario sepa que el bot lo está leyendo
-        message.react('🔊').catch(() => {});
-        return true;
-    }
-
-    return false;
+    return Boolean(encolado);
 }
 
 /**
