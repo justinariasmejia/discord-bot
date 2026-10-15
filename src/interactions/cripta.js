@@ -38,6 +38,12 @@ async function safeDeferUpdate(interaction) {
     }
 }
 
+async function safeDeferReply(interaction, options = { flags: MessageFlags.Ephemeral }) {
+    if (!interaction.deferred && !interaction.replied) {
+        return interaction.deferReply(options).catch(() => null);
+    }
+}
+
 async function safeEditReply(interaction, payload) {
     try {
         if (interaction.deferred || interaction.replied) {
@@ -208,40 +214,40 @@ module.exports = {
 
         // 🏹 Cazar desde el panel maestro
         if (accion === 'hub_cazar') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            await safeDeferReply(interaction);
             const userId = interaction.user.id;
             const res = await cazar(userId, interaction.guildId, esStaffOTester);
 
             if (!res.ok) {
                 logCaza(interaction.guildId, userId, res).catch(() => null);
-                return interaction.editReply(panelCazar(userId, res));
+                return safeEditReply(interaction, panelCazar(userId, res));
             }
 
-            await interaction.editReply(panelCazarAnimacion(1));
+            await safeEditReply(interaction, panelCazarAnimacion(1));
             await new Promise((resolve) => setTimeout(resolve, configBalance.CAZAR?.DELAY_ANIMACION_MS || 1000));
 
-            await interaction.editReply(panelCazarAnimacion(2));
+            await safeEditReply(interaction, panelCazarAnimacion(2));
             await new Promise((resolve) => setTimeout(resolve, configBalance.CAZAR?.DELAY_ANIMACION_MS || 1000));
 
             logCaza(interaction.guildId, userId, res).catch(() => null);
-            return interaction.editReply(panelCazar(userId, res));
+            return safeEditReply(interaction, panelCazar(userId, res));
         }
 
         // 🎁 Reclamar Diario desde el panel maestro
         if (accion === 'hub_diario') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            await safeDeferReply(interaction);
             const res = await reclamarDiario(interaction.user.id, interaction.guildId, esStaffOTester);
             if (res.ok) {
                 logDiario(interaction.guildId, interaction.user.id, res).catch(() => null);
             }
-            return interaction.editReply(panelDiario(interaction.user.id, res));
+            return safeEditReply(interaction, panelDiario(interaction.user.id, res));
         }
 
         // 🎰 Menú de Apuestas desde el panel maestro
         if (accion === 'hub_apostar') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            await safeDeferReply(interaction);
             const usuario = await obtenerUsuario(interaction.user.id, interaction.guildId);
-            return interaction.editReply(panelMenuApuestas(interaction.user.id, usuario));
+            return safeEditReply(interaction, panelMenuApuestas(interaction.user.id, usuario));
         }
 
         // ⚔️ Duelo PvP: Instrucción clara de comando directo en el chat sin menú desplegable

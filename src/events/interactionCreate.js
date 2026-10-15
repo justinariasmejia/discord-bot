@@ -71,6 +71,8 @@ module.exports = {
                 return await handler.ejecutar(interaction, partes, client);
             }
         } catch (error) {
+            // Silenciar errores transitorios de expiración de Discord (>3s de delay o doble clic)
+            if (error.code === 10062 || error.code === 40060) return;
             console.error('❌ Error en interacción:', error);
             await responderError(interaction, 'Un espíritu travieso interfirió. Inténtalo de nuevo en unos segundos.');
         }

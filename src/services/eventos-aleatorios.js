@@ -8,7 +8,7 @@ const { PREGUNTAS_TRIVIA } = require('../data/trivia');
 const { ITEMS } = require('../data/items');
 const { modificarHuesos, obtenerUsuario } = require('./economia');
 const { obtenerConfig, eventoActivo, obtenerCanalApariciones } = require('./evento');
-const { base, COLORES, formatoNum, tiempoRelativo } = require('../utils/embeds');
+const { base, basePremium, COLORES, formatoNum, tiempoRelativo } = require('../utils/embeds');
 
 /**
  * Elimina un mensaje de forma robusta probando el objeto mensaje y canal.messages
