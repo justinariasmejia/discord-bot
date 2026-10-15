@@ -40,6 +40,12 @@ module.exports = {
                         flags: MessageFlags.Ephemeral,
                     });
                 }
+                if (res.motivo === 'monto_excedido') {
+                    return interaction.reply({
+                        content: `❌ La apuesta máxima en duelos es de **${formatoNum(res.max)}** huesos por jugador para prevenir traspasos indebidos.`,
+                        flags: MessageFlags.Ephemeral,
+                    });
+                }
                 if (res.motivo === 'saldo_insuficiente') {
                     return interaction.reply({
                         content: `❌ Saldo insuficiente. Tienes **${formatoNum(res.saldo)}** huesos.`,
@@ -52,17 +58,42 @@ module.exports = {
                         flags: MessageFlags.Ephemeral,
                     });
                 }
-                if (res.motivo === 'silenciado_oogie') {
-                    const unixDesbloqueo = Math.floor(new Date(res.expira).getTime() / 1000);
+                if (res.motivo === 'max_duelos_diario') {
                     return interaction.reply({
-                        content: `🐛 **Maldición de Oogie Boogie:** El Rey de los Bichos ha sellado tus duelos por cobardía o insolencia. Podrás retar nuevamente <t:${unixDesbloqueo}:R>.`,
+                        content: `⚔️ Has alcanzado el límite diario de **${res.max || 5}** duelos completados hoy. Regresa mañana.`,
                         flags: MessageFlags.Ephemeral,
                     });
                 }
-                if (res.motivo === 'rival_silenciado_oogie') {
+                if (res.motivo === 'rival_max_duelos_diario') {
+                    return interaction.reply({
+                        content: `⚔️ El cazador <@${rivalId}> ya alcanzó su límite diario de **${res.max || 5}** duelos hoy.`,
+                        flags: MessageFlags.Ephemeral,
+                    });
+                }
+                if (res.motivo === 'cooldown_mismo_oponente') {
+                    const minutos = Math.ceil((res.restanteMs || 0) / 60000);
+                    return interaction.reply({
+                        content: `⏳ Debes esperar **${minutos} minuto(s)** antes de volver a retar a <@${rivalId}>.`,
+                        flags: MessageFlags.Ephemeral,
+                    });
+                }
+                if (res.motivo === 'cooldown_global_duelo') {
+                    return interaction.reply({
+                        content: `⏳ Debes esperar **${res.segundos} segundos** antes de iniciar otro duelo.`,
+                        flags: MessageFlags.Ephemeral,
+                    });
+                }
+                if (res.motivo === 'silenciado_oogie' || res.motivo === 'silenciado') {
                     const unixDesbloqueo = Math.floor(new Date(res.expira).getTime() / 1000);
                     return interaction.reply({
-                        content: `🐛 El rival <@${rivalId}> está bajo la maldición de silencio de Oogie Boogie y no puede batirse en duelo hasta <t:${unixDesbloqueo}:R>.`,
+                        content: `🚫 Tienes una restricción o sanción activa hasta <t:${unixDesbloqueo}:R>.`,
+                        flags: MessageFlags.Ephemeral,
+                    });
+                }
+                if (res.motivo === 'rival_silenciado_oogie' || res.motivo === 'rival_silenciado') {
+                    const unixDesbloqueo = Math.floor(new Date(res.expira).getTime() / 1000);
+                    return interaction.reply({
+                        content: `🚫 El rival <@${rivalId}> tiene una restricción o sanción activa hasta <t:${unixDesbloqueo}:R>.`,
                         flags: MessageFlags.Ephemeral,
                     });
                 }
@@ -150,12 +181,32 @@ module.exports = {
             }
 
             const rivalPre = await obtenerUsuario(interaction.user.id, interaction.guildId);
-            if (rivalPre.silencioApuestasHasta && Date.now() < rivalPre.silencioApuestasHasta.getTime()) {
-                const unixDesbloqueo = Math.floor(rivalPre.silencioApuestasHasta.getTime() / 1000);
+            const ahoraAceptar = Date.now();
+            if ((rivalPre.silencioApuestasHasta && ahoraAceptar < rivalPre.silencioApuestasHasta.getTime()) ||
+                (rivalPre.bloqueoApuestasHasta && ahoraAceptar < rivalPre.bloqueoApuestasHasta.getTime())) {
+                const expira = rivalPre.bloqueoApuestasHasta || rivalPre.silencioApuestasHasta;
+                const unixDesbloqueo = Math.floor(expira.getTime() / 1000);
                 return interaction.reply({
-                    content: `🐛 No puedes aceptar duelos: estás bajo la maldición de Oogie Boogie hasta <t:${unixDesbloqueo}:R>.`,
+                    content: `🚫 No puedes aceptar duelos: tienes una sanción o restricción activa hasta <t:${unixDesbloqueo}:R>.`,
                     flags: MessageFlags.Ephemeral,
                 });
+            }
+
+            if (config.DUELOS?.MAX_DUELS_PER_DAY) {
+                const inicioDia = new Date();
+                inicioDia.setUTCHours(0, 0, 0, 0);
+                const duelosRivalHoy = await Duelo.countDocuments({
+                    guildId: duelo.guildId,
+                    estado: 'finalizado',
+                    $or: [{ retadorId: interaction.user.id }, { rivalId: interaction.user.id }],
+                    createdAt: { $gte: inicioDia },
+                });
+                if (duelosRivalHoy >= config.DUELOS.MAX_DUELS_PER_DAY) {
+                    return interaction.reply({
+                        content: `⚔️ Ya has completado tu límite diario permitido de **${config.DUELOS.MAX_DUELS_PER_DAY}** duelos hoy.`,
+                        flags: MessageFlags.Ephemeral,
+                    });
+                }
             }
 
             await interaction.deferUpdate();

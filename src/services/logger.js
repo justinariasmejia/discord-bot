@@ -1,9 +1,14 @@
 // src/services/logger.js
-// Sistema de auditoría dual:
+// Sistema de auditoría dual y registro persistente:
 // 1. Logs Públicos: Transparencia total en vivo que justifica de dónde gana y gasta huesos cada usuario.
-// 2. Logs de Administradores: Auditoría detallada de staff, seguridad, mantenimiento y balance.
+// 2. Logs de Administradores: Auditoría detallada de staff, seguridad, mantenimiento, sanciones y balance.
+// 3. Logs Privados y Persistentes: Registro en Base de Datos (ApuestaLog, DuelLog) y canales dedicados para apuestas y duelos.
+
 const { EmbedBuilder } = require('discord.js');
 const ConfigEvento = require('../models/ConfigEvento');
+const Usuario = require('../models/Usuario');
+const DuelLog = require('../models/DuelLog');
+const ApuestaLog = require('../models/ApuestaLog');
 const { formatoNum } = require('../utils/embeds');
 const { EMOJIS } = require('../utils/emojis');
 
@@ -16,6 +21,7 @@ const COLORES_LOG = {
     evento: 0x6a0dad,      // Morado oscuro
     sorteo: 0xffd700,      // Dorado
     sistema: 0x37474f,     // Gris pizarra
+    sancion: 0xd32f2f,     // Rojo alerta
 };
 
 let _client = null;
@@ -43,7 +49,7 @@ async function enviarLogPublico(guildId, { tipo, titulo, descripcion, userId, ca
             .setFooter({ text: '📜 Registro Público • La Cripta de los Huesos' });
 
         if (userId) {
-            const user = _client.users.cache.get(userId);
+            const user = _client.users.cache.get(userId) || await _client.users.fetch(userId).catch(() => null);
             if (user) embed.setAuthor({ name: user.tag, iconURL: user.displayAvatarURL({ dynamic: true }) });
         }
 
@@ -55,7 +61,7 @@ async function enviarLogPublico(guildId, { tipo, titulo, descripcion, userId, ca
 }
 
 // ── Enviar a Canal de Administradores (Seguridad y Moderación) ──
-async function enviarLogAdmin(guildId, { titulo, descripcion, adminId, campos }) {
+async function enviarLogAdmin(guildId, { titulo, descripcion, adminId, campos, color = COLORES_LOG.admin }) {
     if (!_client) return;
     try {
         const config = await ConfigEvento.findOne({ guildId }).lean();
@@ -66,14 +72,14 @@ async function enviarLogAdmin(guildId, { titulo, descripcion, adminId, campos })
         if (!canal || !canal.isTextBased()) return;
 
         const embed = new EmbedBuilder()
-            .setColor(COLORES_LOG.admin)
+            .setColor(color)
             .setTitle(`🛡️ ${titulo}`)
             .setDescription(descripcion)
             .setTimestamp()
             .setFooter({ text: '🔒 Auditoría Administrativa • Personal Autorizado' });
 
         if (adminId) {
-            const admin = _client.users.cache.get(adminId);
+            const admin = _client.users.cache.get(adminId) || await _client.users.fetch(adminId).catch(() => null);
             if (admin) embed.setAuthor({ name: `Admin: ${admin.tag}`, iconURL: admin.displayAvatarURL({ dynamic: true }) });
         }
 
@@ -83,9 +89,161 @@ async function enviarLogAdmin(guildId, { titulo, descripcion, adminId, campos })
     } catch {}
 }
 
+// ── Enviar a Canal Dedicado (Logs Privados Específicos) ──
+async function enviarLogCanalDedicado(guildId, canalIdKey, embed) {
+    if (!_client) return;
+    try {
+        const config = await ConfigEvento.findOne({ guildId }).lean();
+        const canalId = config?.[canalIdKey];
+        if (!canalId) return;
+
+        const canal = _client.channels.cache.get(canalId) || await _client.channels.fetch(canalId).catch(() => null);
+        if (!canal || !canal.isTextBased()) return;
+
+        await canal.send({ embeds: [embed] }).catch(() => null);
+    } catch {}
+}
+
+// ── Persistencia de Logs Privados en Base de Datos y Canales Dedicados ──
+
+async function guardarLogDueloDB({ guildId, retadorId, rivalId, ganadorId, perdedorId, monto, premio, detalle }) {
+    try {
+        const doc = await DuelLog.create({
+            guildId,
+            retadorId,
+            rivalId,
+            ganadorId,
+            perdedorId,
+            monto,
+            premio,
+            detalle: detalle || `Ganador: ${ganadorId} vs ${perdedorId}`,
+        });
+
+        // Si se configuró un canal dedicado para logs de duelos, enviarlo
+        const embedDedicado = new EmbedBuilder()
+            .setColor(COLORES_LOG.duelo)
+            .setTitle('⚔️ Registro Privado • Duelo PvP Finalizado')
+            .setDescription(
+                `**Retador:** <@${retadorId}>\n` +
+                `**Rival:** <@${rivalId}>\n` +
+                `**Ganador:** <@${ganadorId}>\n` +
+                `**Perdedor:** <@${perdedorId}>\n` +
+                `**Monto individual:** ${formatoNum(monto)} 🦴 (Pozo total: ${formatoNum(monto * 2)} 🦴)\n` +
+                `**Premio entregado:** +${formatoNum(premio)} 🦴`
+            )
+            .addFields([
+                { name: '📝 Detalle', value: detalle || 'Duelo completado normalmente', inline: false }
+            ])
+            .setTimestamp()
+            .setFooter({ text: `ID Registro: ${doc._id} • Auditoría Privada` });
+
+        await enviarLogCanalDedicado(guildId, 'canalLogsDuelosId', embedDedicado);
+        return doc;
+    } catch (e) {
+        console.error('Error guardando log de duelo en BD:', e);
+    }
+}
+
+async function guardarLogApuestaDB({ guildId, userId, juego, monto, gano, premio, detalle, saldoFinal }) {
+    try {
+        const doc = await ApuestaLog.create({
+            guildId,
+            userId,
+            juego,
+            monto,
+            gano,
+            premio: premio || 0,
+            detalle: detalle || (gano ? `Ganó +${premio} en ${juego}` : `Perdió -${monto} en ${juego}`),
+        });
+
+        // Si se configuró un canal dedicado para logs de apuestas, enviarlo
+        const embedDedicado = new EmbedBuilder()
+            .setColor(gano ? COLORES_LOG.ganancia : COLORES_LOG.perdida)
+            .setTitle(`🎲 Registro Privado • Apuesta (${juego})`)
+            .setDescription(
+                `**Cazador:** <@${userId}>\n` +
+                `**Juego:** ${juego}\n` +
+                `**Monto apostado:** ${formatoNum(monto)} 🦴\n` +
+                `**Resultado:** ${gano ? `🎉 Victoria (+${formatoNum(premio)} 🦴)` : `💀 Derrota (-${formatoNum(monto)} 🦴)}`}` +
+                (saldoFinal !== undefined ? `\n**Saldo restante:** ${formatoNum(saldoFinal)} 🦴` : '')
+            )
+            .addFields([
+                { name: '📝 Detalle', value: detalle || 'Tirada registrada', inline: false }
+            ])
+            .setTimestamp()
+            .setFooter({ text: `ID Registro: ${doc._id} • Auditoría Privada` });
+
+        await enviarLogCanalDedicado(guildId, 'canalLogsApuestasId', embedDedicado);
+        return doc;
+    } catch (e) {
+        console.error('Error guardando log de apuesta en BD:', e);
+    }
+}
+
+// ── Funciones de Consulta y Filtrado para Administradores ──
+
+/**
+ * Obtener logs de apuestas filtrados por servidor, usuario o juego.
+ * @param {string} guildId
+ * @param {object} [filtro]
+ * @param {string} [filtro.userId]
+ * @param {string} [filtro.juego]
+ * @param {number} [filtro.limite]
+ * @returns {Promise<Array>} Lista de documentos ApuestaLog
+ */
+async function obtenerLogsApuesta(guildId, { userId, juego, limite = 15 } = {}) {
+    const query = { guildId };
+    if (userId) query.userId = userId;
+    if (juego) query.juego = juego;
+    return ApuestaLog.find(query).sort({ createdAt: -1 }).limit(Math.min(limite, 50)).lean();
+}
+
+/**
+ * Obtener logs de duelos filtrados por servidor o usuario.
+ * @param {string} guildId
+ * @param {object} [filtro]
+ * @param {string} [filtro.userId]
+ * @param {number} [filtro.limite]
+ * @returns {Promise<Array>} Lista de documentos DuelLog
+ */
+async function obtenerLogsDuelo(guildId, { userId, limite = 15 } = {}) {
+    const query = { guildId };
+    if (userId) {
+        query.$or = [
+            { retadorId: userId },
+            { rivalId: userId },
+            { ganadorId: userId },
+            { perdedorId: userId },
+        ];
+    }
+    return DuelLog.find(query).sort({ createdAt: -1 }).limit(Math.min(limite, 50)).lean();
+}
+
+/**
+ * Obtener usuarios con sanciones activas (silencio o bloqueo).
+ * @param {string} guildId
+ * @returns {Promise<Array>}
+ */
+async function obtenerSancionesActivas(guildId) {
+    const { obtenerSancionesActivas: getSanciones } = require('./sanciones');
+    return getSanciones(guildId);
+}
+
+/**
+ * Levantar sanción de un usuario.
+ * @param {string} userId
+ * @param {string} guildId
+ * @param {string} [adminId]
+ * @returns {Promise<{ ok: boolean, motivo?: string }>}
+ */
+async function levantarSancion(userId, guildId, adminId = null) {
+    const { levantarSancion: levantar } = require('./sanciones');
+    return levantar(userId, guildId, adminId);
+}
+
 // ── 1. LOG PÚBLICO: CACERÍA DE HUESOS ──
 async function logCaza(guildId, userId, resultado) {
-    if (!resultado.ok && resultado.motivo === 'cooldown') return; // no spamear cooldowns
+    if (!resultado.ok && resultado.motivo === 'cooldown') return;
     const esPremio = (resultado.premio || 0) > 0;
     const campos = [
         { name: '📦 Hallazgo', value: resultado.titulo || 'Exploración', inline: true },
@@ -122,24 +280,39 @@ async function logDiario(guildId, userId, resultado) {
     });
 }
 
-// Cooldown en memoria de logs para evitar saturación de canales por spam de tragamonedas
+// Cooldown en memoria de logs públicos para evitar saturación de canales por spam de tragamonedas
 const cooldownsLogsApuestas = new Map(); // userId -> timestamp
 
-// ── 3. LOG PÚBLICO: APUESTAS (Cara o Cruz, Tragamonedas, etc.) ──
+// ── 3. LOG PÚBLICO & PRIVADO: APUESTAS (Cara o Cruz, Tragamonedas, Dados, Ruleta) ──
 async function logApuesta(guildId, userId, resultado) {
     if (!resultado.ok) return;
     const gano = resultado.gana;
-    const nombreJuego = resultado.juego === 'cara_cruz' ? '🪙 Cara o Cruz' : (resultado.juego === 'tragamonedas' ? '🎰 Tragamonedas' : resultado.juego);
+    const nombreJuego = resultado.juego === 'cara_cruz'
+        ? '🪙 Cara o Cruz'
+        : (resultado.juego === 'tragamonedas'
+            ? '🎰 Tragamonedas'
+            : (resultado.juego === 'dados' ? '🎲 Dados Malditos' : (resultado.juego === 'ruleta' ? '🎡 Ruleta Calabaza' : resultado.juego)));
 
-    // 🛡️ Filtro inteligente de spam en logs públicos:
-    // • Las victorias SIEMPRE se publican (para celebrar premios y botes).
-    // • Las pérdidas de montos pequeños (< 50 huesos) en tragamonedas NO se publican para no saturar el canal de logs.
-    // • Solo se publican pérdidas si el monto apostado es relevante (>= 50 huesos).
+    // 1. Guardar SIEMPRE en base de datos y enviar al canal privado de apuestas si existe
+    guardarLogApuestaDB({
+        guildId,
+        userId,
+        juego: resultado.juego || 'apuesta',
+        monto: resultado.monto,
+        gano,
+        premio: resultado.premio || 0,
+        detalle: resultado.detalle || `${nombreJuego}: ${gano ? `Ganó +${formatoNum(resultado.premio)}` : `Perdió -${formatoNum(resultado.monto)}`}`,
+        saldoFinal: resultado.saldoFinal,
+    }).catch(() => null);
+
+    // 2. Filtro inteligente de spam para el canal PÚBLICO de la comunidad:
+    // • Las victorias siempre se publican (para celebrar botes y premios).
+    // • Las pérdidas pequeñas (< 50 huesos) en minijuegos rápidos no se envían al canal público para no saturarlo.
     if (!gano && resultado.monto < 50) {
-        return; // No spamear el canal público con tiradas cotidianas perdidas de 10-25 huesos
+        return;
     }
 
-    // Throttle: Máximo 1 log de apuesta por usuario cada 15 segundos en el canal público
+    // Throttle público: Máximo 1 log de apuesta perdida por usuario cada 15 segundos en el canal público
     const ahora = Date.now();
     const ultimoLog = cooldownsLogsApuestas.get(userId) || 0;
     if (ahora - ultimoLog < 15000 && !gano) {
@@ -151,8 +324,11 @@ async function logApuesta(guildId, userId, resultado) {
         { name: '🎲 Juego', value: nombreJuego, inline: true },
         { name: '💰 Monto Apostado', value: `${formatoNum(resultado.monto)} 🦴`, inline: true },
         { name: gano ? '🎉 Ganancia' : '🩸 Pérdida', value: gano ? `+${formatoNum(resultado.premio)} 🦴` : `-${formatoNum(resultado.monto)} 🦴`, inline: true },
-        { name: '🦴 Saldo Restante', value: `${formatoNum(resultado.saldoFinal)} 🦴`, inline: true },
     ];
+
+    if (resultado.saldoFinal !== undefined) {
+        campos.push({ name: '🦴 Saldo Restante', value: `${formatoNum(resultado.saldoFinal)} 🦴`, inline: true });
+    }
 
     if (resultado.juego === 'cara_cruz') {
         campos.push({ name: '🎯 Predicción / Cayó', value: `${(resultado.eleccion || '').toUpperCase()} ➡️ **${(resultado.resultado || resultado.resultadoLado || '').toUpperCase()}**`, inline: true });
@@ -186,8 +362,22 @@ async function logRuletaGrupal(guildId, ganadorId, totalPozo, premio, numPartici
     });
 }
 
-// ── 4. LOG PÚBLICO: DUELOS PVP ──
-async function logDuelo(guildId, ganadorId, perdedorId, premio) {
+// ── 4. LOG PÚBLICO & PRIVADO: DUELOS PVP ──
+async function logDuelo(guildId, ganadorId, perdedorId, premio, monto = 0, detalle = null) {
+    // Si viene monto, respaldar también en BD
+    if (monto > 0) {
+        guardarLogDueloDB({
+            guildId,
+            retadorId: perdedorId,
+            rivalId: ganadorId,
+            ganadorId,
+            perdedorId,
+            monto,
+            premio,
+            detalle: detalle || 'Duelo PvP resuelto',
+        }).catch(() => null);
+    }
+
     const campos = [
         { name: '🏆 Vencedor', value: `<@${ganadorId}>`, inline: true },
         { name: '💀 Caído', value: `<@${perdedorId}>`, inline: true },
@@ -233,7 +423,7 @@ async function logSorteo(guildId, ganadorId, premio, creadorId) {
     });
 }
 
-// ── 7. LOG DE AUDITORÍA: ADMINISTRADORES ──
+// ── 7. LOG DE AUDITORÍA: ADMINISTRADORES Y SEGURIDAD ──
 async function logAdmin(guildId, adminId, accion, descripcion, campos = []) {
     await enviarLogAdmin(guildId, {
         titulo: accion,
@@ -247,6 +437,7 @@ module.exports = {
     setLogClient,
     enviarLogPublico,
     enviarLogAdmin,
+    enviarLogCanalDedicado,
     logCaza,
     logDiario,
     logApuesta,
@@ -255,4 +446,12 @@ module.exports = {
     logEvento,
     logSorteo,
     logAdmin,
+    // Helpers de persistencia en BD y canal privado
+    guardarLogDueloDB,
+    guardarLogApuestaDB,
+    // Consultas y gestión de auditoría/sanciones
+    obtenerLogsApuesta,
+    obtenerLogsDuelo,
+    obtenerSancionesActivas,
+    levantarSancion,
 };

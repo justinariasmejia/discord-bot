@@ -1,4 +1,5 @@
 // src/services/duelos.js
+const { sancionarUsuario } = require('./sanciones');
 // Sistema de duelos entre jugadores con juego de reacción y persistencia.
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const Duelo = require('../models/Duelo');
@@ -61,6 +62,79 @@ function filaDispararDuelo(dueloId) {
 }
 
 async function crearDuelo(guildId, canalId, retadorId, rivalId, monto) {
+    monto = Math.trunc(Number(monto));
+
+    if (isNaN(monto) || monto < config.APUESTAS.MINIMA) {
+        return { ok: false, motivo: 'monto_invalido', min: config.APUESTAS.MINIMA };
+    }
+
+    const maxApuesta = config.DUELOS?.APUESTA_MAXIMA || 1000;
+    if (monto > maxApuesta) {
+        return { ok: false, motivo: 'monto_excedido', max: maxApuesta };
+    }
+
+    const inicioDia = new Date();
+    inicioDia.setUTCHours(0, 0, 0, 0);
+
+    // 1. Verificar límite diario de duelos completados por ambos usuarios
+    if (config.DUELOS?.MAX_DUELS_PER_DAY) {
+        const duelosRetadorHoy = await Duelo.countDocuments({
+            guildId,
+            estado: 'finalizado',
+            $or: [{ retadorId }, { rivalId: retadorId }],
+            createdAt: { $gte: inicioDia },
+        });
+        if (duelosRetadorHoy >= config.DUELOS.MAX_DUELS_PER_DAY) {
+            return { ok: false, motivo: 'max_duelos_diario', max: config.DUELOS.MAX_DUELS_PER_DAY };
+        }
+
+        const duelosRivalHoy = await Duelo.countDocuments({
+            guildId,
+            estado: 'finalizado',
+            $or: [{ retadorId: rivalId }, { rivalId }],
+            createdAt: { $gte: inicioDia },
+        });
+        if (duelosRivalHoy >= config.DUELOS.MAX_DUELS_PER_DAY) {
+            return { ok: false, motivo: 'rival_max_duelos_diario', max: config.DUELOS.MAX_DUELS_PER_DAY };
+        }
+    }
+
+    // 2. Verificar cooldown entre el mismo adversario para evitar acuerdos o transferencias repetitivas
+    if (config.DUELOS?.COOLDOWN_SAME_OPPONENT_MS) {
+        const ultimoDuelo = await Duelo.findOne({
+            guildId,
+            estado: 'finalizado',
+            $or: [
+                { retadorId, rivalId },
+                { retadorId: rivalId, rivalId: retadorId },
+            ],
+        }).sort({ createdAt: -1 });
+
+        if (ultimoDuelo) {
+            const transcurrido = Date.now() - ultimoDuelo.createdAt.getTime();
+            if (transcurrido < config.DUELOS.COOLDOWN_SAME_OPPONENT_MS) {
+                const restanteMs = config.DUELOS.COOLDOWN_SAME_OPPONENT_MS - transcurrido;
+                return { ok: false, motivo: 'cooldown_mismo_oponente', restanteMs };
+            }
+        }
+    }
+
+    // 3. Cooldown global de duelos por usuario (evitar spam de duelos seguidos)
+    const cooldownGlobalMs = config.DUELOS?.COOLDOWN_GLOBAL_MS || 45000;
+    const ultimoDueloGeneral = await Duelo.findOne({
+        guildId,
+        estado: 'finalizado',
+        $or: [{ retadorId }, { rivalId: retadorId }],
+    }).sort({ createdAt: -1 });
+
+    if (ultimoDueloGeneral) {
+        const transcurrido = Date.now() - ultimoDueloGeneral.createdAt.getTime();
+        if (transcurrido < cooldownGlobalMs) {
+            const segundos = Math.ceil((cooldownGlobalMs - transcurrido) / 1000);
+            return { ok: false, motivo: 'cooldown_global_duelo', segundos };
+        }
+    }
+
     const confEvento = await obtenerConfig(guildId);
     if (!eventoActivo(confEvento)) return { ok: false, motivo: 'evento_cerrado' };
     if (confEvento.modoTest) {
@@ -73,20 +147,19 @@ async function crearDuelo(guildId, canalId, retadorId, rivalId, monto) {
         return { ok: false, motivo: 'blacklist' };
     }
 
+    const ahora = Date.now();
     const retador = await obtenerUsuario(retadorId, guildId);
-    if (retador.silencioApuestasHasta && Date.now() < retador.silencioApuestasHasta.getTime()) {
-        return { ok: false, motivo: 'silenciado_oogie', expira: retador.silencioApuestasHasta };
+    if ((retador.silencioApuestasHasta && ahora < retador.silencioApuestasHasta.getTime()) ||
+        (retador.bloqueoApuestasHasta && ahora < retador.bloqueoApuestasHasta.getTime())) {
+        const expira = retador.bloqueoApuestasHasta || retador.silencioApuestasHasta;
+        return { ok: false, motivo: 'silenciado', expira };
     }
 
     const rival = await obtenerUsuario(rivalId, guildId);
-    if (rival.silencioApuestasHasta && Date.now() < rival.silencioApuestasHasta.getTime()) {
-        return { ok: false, motivo: 'rival_silenciado_oogie', expira: rival.silencioApuestasHasta };
-    }
-
-    monto = Math.trunc(Number(monto));
-
-    if (isNaN(monto) || monto < config.APUESTAS.MINIMA) {
-        return { ok: false, motivo: 'monto_invalido', min: config.APUESTAS.MINIMA };
+    if ((rival.silencioApuestasHasta && ahora < rival.silencioApuestasHasta.getTime()) ||
+        (rival.bloqueoApuestasHasta && ahora < rival.bloqueoApuestasHasta.getTime())) {
+        const expira = rival.bloqueoApuestasHasta || rival.silencioApuestasHasta;
+        return { ok: false, motivo: 'rival_silenciado', expira };
     }
 
     if (retador.huesos < monto) {
@@ -177,6 +250,7 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
     // Verificar que quien disparó sea uno de los participantes
     if (disparadorId !== duelo.retadorId && disparadorId !== duelo.rivalId) return;
 
+    const pozoTotal = duelo.monto * 2;
     let ganadorId;
     let perdedorId;
     let motivoVictoria;
@@ -193,18 +267,151 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
         motivoVictoria = `¡<@${ganadorId}> tuvo los reflejos de ultratumba más veloces!`;
     }
 
-    const pozoTotal = duelo.monto * 2;
-    const corteCasa = Math.round(pozoTotal * config.DUELOS.CORTE_CASA);
+    duelo.ganadorId = ganadorId;
+
+    // 🛡️ Detección agresiva de colusión / win-trading entre estos dos duelistas
+    let esColusion = false;
+    let motivoFraude = '';
+
+    if (config.DUELOS?.ENABLE_ANTI_COLLUSION) {
+        const unDiaAtras = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const duelosPrevios = await Duelo.find({
+            guildId: duelo.guildId,
+            estado: 'finalizado',
+            _id: { $ne: duelo._id },
+            $or: [
+                { retadorId: duelo.retadorId, rivalId: duelo.rivalId },
+                { retadorId: duelo.rivalId, rivalId: duelo.retadorId },
+            ],
+            createdAt: { $gte: unDiaAtras },
+        }).sort({ createdAt: -1 });
+
+        const derrotasPreviasContraGanador = duelosPrevios.filter((d) => d.ganadorId === ganadorId).length;
+        const huesosGanadosPrevios = duelosPrevios
+            .filter((d) => d.ganadorId === ganadorId)
+            .reduce((sum, d) => sum + (d.monto || 0), 0);
+
+        const totalHuesosPasados = huesosGanadosPrevios + duelo.monto;
+
+        // 1. Si el perdedor ya le había perdido hoy al mismo usuario (patrón de derrotas consecutivas)
+        if (derrotasPreviasContraGanador >= 1) {
+            esColusion = true;
+            motivoFraude = `Derrotas consecutivas intencionales (${derrotasPreviasContraGanador + 1} duelos perdidos hacia el mismo ganador hoy)`;
+        }
+        // 2. Si se están transfiriendo un monto acumulado excesivo (>= 500 huesos)
+        else if (totalHuesosPasados >= 500 && duelosPrevios.length >= 1) {
+            esColusion = true;
+            motivoFraude = `Traspaso excesivo y concentrado de capital (${totalHuesosPasados} huesos pasados hoy entre ambos)`;
+        }
+        // 3. Si el perdedor presionó señuelo (disparo en falso) en duelo de alto monto o con duelos previos
+        else if (esSenuelo && (duelo.monto >= 200 || duelosPrevios.length >= 1)) {
+            esColusion = true;
+            motivoFraude = `Tiro en falso deliberado (señuelo) para ceder el pozo de ${duelo.monto} huesos`;
+        }
+    }
+
+    const { logDuelo, guardarLogDueloDB, logAdmin } = require('./logger');
+
+    if (esColusion) {
+        // 🚨 CASO DE FRAUDE: CONFISCACIÓN TOTAL DEL POZO Y SANCIONES DURAS
+        duelo.premioEntregado = 0;
+        await duelo.save();
+
+        const factorSancion = config.DUELOS?.SANCTION_FACTOR || 0.20;
+        const duracionSancionMs = config.DUELOS?.SANCTION_DURATION_MS || 2 * 60 * 60 * 1000;
+
+        // Sancionar al cedente (perdedor)
+        await sancionarUsuario(
+            perdedorId,
+            duelo.guildId,
+            `Colusión en duelos a favor de <@${ganadorId}>: ${motivoFraude}`,
+            { factor: factorSancion, duracionMs: duracionSancionMs }
+        );
+
+        // Sancionar al receptor ilícito (ganador)
+        await sancionarUsuario(
+            ganadorId,
+            duelo.guildId,
+            `Beneficiario de colusión en duelos con <@${perdedorId}>: ${motivoFraude}`,
+            { factor: factorSancion, duracionMs: duracionSancionMs }
+        );
+
+        // Registrar en estadísticas sin entregar ganancias
+        await Promise.all([
+            Usuario.updateOne(
+                { userId: ganadorId, guildId: duelo.guildId },
+                { $inc: { 'estadisticas.apostado': duelo.monto, 'estadisticas.duelosPerdidos': 1 } }
+            ),
+            Usuario.updateOne(
+                { userId: perdedorId, guildId: duelo.guildId },
+                { $inc: { 'estadisticas.apostado': duelo.monto, 'estadisticas.perdido': duelo.monto, 'estadisticas.duelosPerdidos': 1 } }
+            ),
+        ]);
+
+        // Guardar logs de auditoría privada y administrativa
+        await guardarLogDueloDB({
+            guildId: duelo.guildId,
+            retadorId: duelo.retadorId,
+            rivalId: duelo.rivalId,
+            ganadorId,
+            perdedorId,
+            monto: duelo.monto,
+            premio: 0,
+            detalle: `🚨 [COLUSIÓN DETECTADA] ${motivoFraude} • Pozo de ${pozoTotal} huesos confiscado`,
+        }).catch(() => null);
+
+        await logAdmin(
+            duelo.guildId,
+            null,
+            '🚨 Duelo Anulado por Colusión',
+            `Se detectó colusión activa entre <@${perdedorId}> y <@${ganadorId}>.\n**Infracción:** ${motivoFraude}\n**Medida:** Pozo de ${pozoTotal} huesos CONFISCADO. Ambos usuarios recibieron multas y suspensión temporal.`
+        ).catch(() => null);
+
+        const mensaje = await canal.messages.fetch(duelo.mensajeId).catch(() => null);
+        const embedFraude = base(
+            '🚨 ¡FRAUDE Y COLUSIÓN DETECTADA EN DUELO!',
+            `**El sistema preventivo de La Cripta ha intervenido la contienda.**\n\n` +
+            `⚠️ **Infracción:** ${motivoFraude}\n` +
+            `👤 **Cedente:** <@${perdedorId}>\n` +
+            `👤 **Receptor:** <@${ganadorId}>\n\n` +
+            `⚖️ **RESOLUCIÓN DISCIPLINARIA:**\n` +
+            `• El pozo completo de **${formatoNum(pozoTotal)}** huesos ha sido **CONFISCADO POR LA CRIPTA**.\n` +
+            `• Ambos participantes han sido **sancionados con multas de huesos y bloqueo temporal de apuestas/duelos**.\n\n` +
+            `⏱️ _Este mensaje se eliminará automáticamente en 20 segundos._`,
+            COLORES.rojo
+        );
+
+        if (mensaje) {
+            await mensaje.edit({ content: null, embeds: [embedFraude], components: [] }).catch(() => null);
+            setTimeout(() => {
+                mensaje.delete().catch(() => null);
+            }, 20000);
+        }
+        return;
+    }
+
+    // ── DUELO LIMPIO Y VÁLIDO ──
+    const corteCasa = Math.round(pozoTotal * (config.DUELOS?.CORTE_CASA || 0.05));
     const premio = pozoTotal - corteCasa;
 
     await modificarHuesos(ganadorId, duelo.guildId, premio, 'apuesta', 'Victoria en Duelo');
 
-    duelo.ganadorId = ganadorId;
     duelo.premioEntregado = premio;
     await duelo.save();
 
+    // Guardar en BD (DuelLog) y emitir logs públicos y privados
     try {
-        const { logDuelo } = require('./logger');
+        await guardarLogDueloDB({
+            guildId: duelo.guildId,
+            retadorId: duelo.retadorId,
+            rivalId: duelo.rivalId,
+            ganadorId,
+            perdedorId,
+            monto: duelo.monto,
+            premio,
+            detalle: motivoVictoria,
+        }).catch(() => null);
+
         logDuelo(duelo.guildId, ganadorId, perdedorId, premio).catch(() => null);
     } catch {}
 

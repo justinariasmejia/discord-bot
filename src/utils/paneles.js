@@ -437,6 +437,13 @@ function panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra) {
         if (res?.motivo === 'invalido') mensaje = res.detalle || 'Monto o apuesta inválida.';
         if (res?.motivo === 'ocupado') mensaje = 'Se está procesando otra acción con tus huesos. Inténtalo de nuevo.';
         if (res?.motivo === 'evento_cerrado') mensaje = 'La Cripta ya ha cerrado sus puertas por esta temporada.';
+        if (res?.motivo === 'exceso_apuestas_hora') {
+            mensaje = `🛑 **Límite Horario Superado:** Has alcanzado el límite preventivo de **${res.maxHora || 30} apuestas por hora**.\n\nDescansa un momento antes de volver a tentar a la suerte en la Cripta.`;
+        }
+        if (res?.motivo === 'silenciado' || res?.motivo === 'bloqueado') {
+            const unix = Math.floor(new Date(res.expira).getTime() / 1000);
+            mensaje = `🚫 **Acceso Restringido:** Cuentas con una sanción o restricción activa hasta <t:${unix}:R>.`;
+        }
 
         const embedError = base('❌ Apuesta Rechazada', mensaje, COLORES.rojo);
         return { embeds: [embedError], components: [filaVolver(duenoId)] };

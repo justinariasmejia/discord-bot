@@ -46,6 +46,9 @@ async function construirPanelAdmin(guildId) {
     desc += `👑 **Panel Admin (Fijo):** ${formatCanal(config.canalAdminPanelId)}\n`;
     desc += `📢 **Logs Públicos (Transparencia):** ${formatCanal(config.canalLogsPublicosId)}\n`;
     desc += `🛡️ **Logs de Admins (Auditoría):** ${formatCanal(config.canalLogsId)}\n`;
+    desc += `🎲 **Logs Apuestas (Privado):** ${formatCanal(config.canalLogsApuestasId)}\n`;
+    desc += `⚔️ **Logs Duelos (Privado):** ${formatCanal(config.canalLogsDuelosId)}\n`;
+    desc += `🚨 **Canal Sanciones:** ${formatCanal(config.canalSancionesId)}\n`;
     desc += `🎃 **Eventos Comunitarios:** ${formatCanal(config.canalEventosId)}\n`;
     desc += `🎵 **Reproductor Música:** ${formatCanal(config.canalMusicaId)}\n`;
     const rolesList = (config.rolesAdminIds && config.rolesAdminIds.length > 0)
@@ -169,7 +172,26 @@ async function construirPanelAdmin(guildId) {
             .setStyle(ButtonStyle.Secondary)
     );
 
-    return { embeds: [embed], components: [fila1, fila2, fila3] };
+    // Fila 4: Sanciones, Auditoría y Seguridad
+    const fila4 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('admin:sancion_ver:admin')
+            .setLabel('Ver Sanciones')
+            .setEmoji('📋')
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId('admin:sancion_aplicar_btn:admin')
+            .setLabel('Aplicar Sanción')
+            .setEmoji('⚖️')
+            .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+            .setCustomId('admin:sancion_quitar_btn:admin')
+            .setLabel('Levantar Sanción')
+            .setEmoji('🔓')
+            .setStyle(ButtonStyle.Success)
+    );
+
+    return { embeds: [embed], components: [fila1, fila2, fila3, fila4] };
 }
 
 /**

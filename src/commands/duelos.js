@@ -74,6 +74,11 @@ module.exports = {
                     content: `❌ Monto inválido. La apuesta mínima es de **${res.min}** huesos.`,
                 });
             }
+            if (res.motivo === 'monto_excedido') {
+                return interaction.editReply({
+                    content: `❌ La apuesta máxima en duelos es de **${formatoNum(res.max)}** huesos por jugador para prevenir traspasos indebidos.`,
+                });
+            }
             if (res.motivo === 'saldo_insuficiente') {
                 return interaction.editReply({
                     content: `❌ Saldo insuficiente. Tienes **${formatoNum(res.saldo)}** huesos.`,
@@ -89,9 +94,37 @@ module.exports = {
                     content: '🚫 Uno de los participantes está en la lista negra y no puede participar en duelos.',
                 });
             }
-            if (res.motivo === 'modo_test') {
+            if (res.motivo === 'max_duelos_diario') {
                 return interaction.editReply({
-                    content: '🛠️ **Duelos Deshabilitados:** El evento se encuentra actualmente en pausa/mantenimiento.',
+                    content: `⚔️ Has alcanzado el límite diario permitido de **${res.max || 5}** duelos completados hoy. Regresa mañana para seguir desafiando a otros cazadores.`,
+                });
+            }
+            if (res.motivo === 'rival_max_duelos_diario') {
+                return interaction.editReply({
+                    content: `⚔️ El cazador <@${rival.id}> ya alcanzó su límite diario de **${res.max || 5}** duelos hoy.`,
+                });
+            }
+            if (res.motivo === 'cooldown_mismo_oponente') {
+                const minutos = Math.ceil((res.restanteMs || 0) / 60000);
+                return interaction.editReply({
+                    content: `⏳ Debes esperar **${minutos} minuto(s)** antes de volver a retar a <@${rival.id}> para prevenir acuerdos o transferencias indebidas.`,
+                });
+            }
+            if (res.motivo === 'cooldown_global_duelo') {
+                return interaction.editReply({
+                    content: `⏳ Debes esperar **${res.segundos} segundos** antes de iniciar otro duelo.`,
+                });
+            }
+            if (res.motivo === 'silenciado_oogie' || res.motivo === 'silenciado') {
+                const unixDesbloqueo = Math.floor(new Date(res.expira).getTime() / 1000);
+                return interaction.editReply({
+                    content: `🚫 Tienes una restricción o sanción activa y no puedes batirte en duelo hasta <t:${unixDesbloqueo}:R>.`,
+                });
+            }
+            if (res.motivo === 'rival_silenciado_oogie' || res.motivo === 'rival_silenciado') {
+                const unixDesbloqueo = Math.floor(new Date(res.expira).getTime() / 1000);
+                return interaction.editReply({
+                    content: `🚫 <@${rival.id}> tiene una restricción o sanción activa y no puede recibir duelos hasta <t:${unixDesbloqueo}:R>.`,
                 });
             }
             return interaction.editReply({

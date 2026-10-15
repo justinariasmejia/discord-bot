@@ -30,6 +30,11 @@ const usuarioSchema = new Schema(
             robosFallidos: { type: Number, default: 0 },
             vecesRobado: { type: Number, default: 0 },
         },
+        // Anti-fraude tracking fields
+        apuestasCountHora: { type: Number, default: 0 },
+        apuestasHoraInicio: { type: Date, default: null },
+        sospechas: { type: Number, default: 0 },
+        ultimaSospecha: { type: Date, default: null },
     },
     { timestamps: true }
 );

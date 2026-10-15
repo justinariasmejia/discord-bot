@@ -68,6 +68,13 @@ module.exports = {
             MULTIPLICADOR_PAGO: 2.0,
         },
 
+        // ---- Anti‑fraude / sospechas ----
+        ENABLE_ANTI_FRAUDE: true,                // Activar detección de comportamiento sospechoso
+        SUSPICION_THRESHOLD: 3,                  // Nº de apuestas sospechosas antes de sancionar
+        SANCTION_FACTOR: 0.15,                   // Pérdida del 15 % de huesos al sancionar
+        SANCTION_DURATION_MS: 30 * 60 * 1000,    // 30 min de restricción (mute/bloqueo)
+        MAX_APUESTAS_PER_HORA: 20,               // Límite de apuestas por usuario por hora
+
         // Dados Malditos (2 dados de 6 caras, suma de 2 a 12)
         DADOS: {
             PAGO_BAJO_ALTO: 1.9,
@@ -113,6 +120,14 @@ module.exports = {
         CORTE_CASA: 0.05,             // 5% para la casa del pozo total
         DELAY_MIN_MS: 2000,           // Retardo mínimo para la señal de disparo (2s)
         DELAY_MAX_MS: 5000,           // Retardo máximo para la señal de disparo (5s)
+        APUESTA_MAXIMA: 1000,         // Apuesta máxima por jugador para evitar desangrado masivo
+        COOLDOWN_GLOBAL_MS: 45 * 1000, // Cooldown global de 45s entre duelos para un mismo usuario
+        // ---- Anti‑colusión ----
+        MAX_DUELS_PER_DAY: 5,                     // Límite de duelos por usuario al día
+        COOLDOWN_SAME_OPPONENT_MS: 30 * 60 * 1000, // 30 min entre duelos contra el mismo adversario
+        SANCTION_FACTOR: 0.20,                    // Pérdida del 20 % de huesos al detectar colusión
+        SANCTION_DURATION_MS: 2 * 60 * 60 * 1000, // 2 h de sanción (bloqueo total de duelos y apuestas)
+        ENABLE_ANTI_COLLUSION: true,               // Activar restricciones anti‑colusión
     },
 
     // ─── Robos (Fase 4) ───
@@ -158,6 +173,17 @@ module.exports = {
         SILENCIO_IGNORAR_MS: 45 * 60 * 1000, // 45 min sin apostar ni duelos tras ignorar
         MULTIPLICADOR_GANANCIA: 1.45,        // Si el cazador vence a las trampas: recupera apuesta + 45% neto
         GIF_APARICION_URL: 'attachment://oogie.gif', // GIF local permanente empaquetado como archivo adjunto
+    },
+
+    // ─── Seguridad y Anti‑Fraude (Nivel Alto) ───
+    SEGURIDAD: {
+        GLOBAL_RISK_LEVEL: 'ALTA',                     // Nivel de riesgo global (ALTA, MEDIA, BAJA)
+        DETECTION_SENSITIVITY: 0.9,                    // 0‑1, mayor sensibilidad = más detección
+        SANCTION_MULTIPLIER: 0.25,                     // % de huesos perdidos en sanciones fuertes
+        BAN_DURATION_MS: 24 * 60 * 60 * 1000,          // 24 h de prohibición por reincidencia
+        LOGGING_ENABLED: true,                         // Registrar todas las actividades sospechosas
+        NOTIFY_ADMIN: true,                            // Notificar al admin del servidor
+        MAX_ALERTS_PER_HOUR: 10,                       // Límite de alertas antes de throttling
     },
 };
 

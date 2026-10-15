@@ -67,6 +67,152 @@ module.exports = {
             });
         }
 
+        // ── 0. Botones y Modales del Panel de Sanciones ──
+        if (accion === 'sancion_ver') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const { obtenerSancionesActivas } = require('../services/logger');
+            const sancionados = await obtenerSancionesActivas(guildId);
+
+            if (!sancionados.length) {
+                return interaction.editReply({
+                    embeds: [basePremium('🕊️ Sin Sanciones Activas', 'No hay ningún cazador con sanciones, silencios ni bloqueos activos en este momento.', COLORES.verde)],
+                });
+            }
+
+            const lineas = sancionados.map((u, i) => {
+                const unixSilencio = u.silencioApuestasHasta ? Math.floor(new Date(u.silencioApuestasHasta).getTime() / 1000) : null;
+                const tiempoStr = unixSilencio ? `<t:${unixSilencio}:R>` : 'Indefinido';
+                return `**${i + 1}.** <@${u.userId}> • **${formatoNum(u.huesos)} 🦴** | Expira: ${tiempoStr} | Sospechas: \`${u.sospechas || 0}\``;
+            });
+
+            const embed = basePremium('🚨 Sanciones y Bloqueos Activos', lineas.join('\n'), COLORES.rojo);
+            return interaction.editReply({ embeds: [embed] });
+        }
+
+        if (accion === 'sancion_aplicar_btn') {
+            const modal = new ModalBuilder()
+                .setCustomId('admin:modal_sancion_aplicar:admin')
+                .setTitle('⚖️ Aplicar Sanción Preventiva');
+
+            const inputUsuario = new TextInputBuilder()
+                .setCustomId('usuario')
+                .setLabel('ID o @Mención del Cazador')
+                .setPlaceholder('Ej: 123456789012345678 o @usuario')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true);
+
+            const inputMinutos = new TextInputBuilder()
+                .setCustomId('minutos')
+                .setLabel('Duración en minutos')
+                .setValue('60')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true);
+
+            const inputMulta = new TextInputBuilder()
+                .setCustomId('multa')
+                .setLabel('% Multa de Huesos (0 a 100)')
+                .setValue('15')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false);
+
+            const inputRazon = new TextInputBuilder()
+                .setCustomId('razon')
+                .setLabel('Motivo de la sanción')
+                .setPlaceholder('Ej: Sospecha de colusión en duelos o abuso')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(false);
+
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(inputUsuario),
+                new ActionRowBuilder().addComponents(inputMinutos),
+                new ActionRowBuilder().addComponents(inputMulta),
+                new ActionRowBuilder().addComponents(inputRazon)
+            );
+
+            return interaction.showModal(modal);
+        }
+
+        if (accion === 'sancion_quitar_btn') {
+            const modal = new ModalBuilder()
+                .setCustomId('admin:modal_sancion_quitar:admin')
+                .setTitle('🔓 Levantar Sanción / Indulto');
+
+            const inputUsuario = new TextInputBuilder()
+                .setCustomId('usuario')
+                .setLabel('ID o @Mención del Cazador a Indultar')
+                .setPlaceholder('Ej: 123456789012345678 o @usuario')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(inputUsuario));
+            return interaction.showModal(modal);
+        }
+
+        if (accion === 'sancion_refresh') {
+            await safeDeferUpdate(interaction);
+            const { actualizarPanelSanciones } = require('../services/panelSanciones');
+            await actualizarPanelSanciones(guildId, client);
+            return safeReply(interaction, {
+                content: '🔄 Panel de sanciones actualizado con éxito.',
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
+        if (accion === 'modal_sancion_aplicar') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const usuarioRaw = interaction.fields.getTextInputValue('usuario');
+            const targetId = (usuarioRaw.match(/\d+/) || [])[0];
+            const minutos = parseInt(interaction.fields.getTextInputValue('minutos'), 10) || 60;
+            const multaPct = parseInt(interaction.fields.getTextInputValue('multa') || '0', 10);
+            const razon = interaction.fields.getTextInputValue('razon') || 'Sanción manual de staff';
+
+            if (!targetId) {
+                return interaction.editReply({ content: '❌ No se pudo identificar el usuario. Ingresa un ID o mención válida.' });
+            }
+
+            const { sancionarUsuario } = require('../services/sanciones');
+            const res = await sancionarUsuario(targetId, guildId, razon, {
+                duracionMs: minutos * 60 * 1000,
+                factor: multaPct / 100,
+                adminId: interaction.user.id,
+            });
+
+            if (!res.ok) {
+                return interaction.editReply({ content: `❌ No se pudo aplicar la sanción: ${res.motivo || res.error}` });
+            }
+
+            const unixExp = Math.floor(new Date(res.expiraEn).getTime() / 1000);
+            const desc = `El cazador <@${targetId}> ha sido sancionado exitosamente.\n\n` +
+                `• **⏱️ Expira:** <t:${unixExp}:R> (${minutos} min)\n` +
+                `• **💸 Multa aplicada:** -${formatoNum(res.perdida)} huesos (${multaPct}%)\n` +
+                `• **📋 Motivo:** ${razon}\n` +
+                `• **🛡️ Sancionado por:** <@${interaction.user.id}>`;
+
+            return interaction.editReply({ embeds: [basePremium('🚨 Sanción Aplicada', desc, COLORES.rojo)] });
+        }
+
+        if (accion === 'modal_sancion_quitar') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const usuarioRaw = interaction.fields.getTextInputValue('usuario');
+            const targetId = (usuarioRaw.match(/\d+/) || [])[0];
+
+            if (!targetId) {
+                return interaction.editReply({ content: '❌ No se pudo identificar el usuario. Ingresa un ID o mención válida.' });
+            }
+
+            const { levantarSancion } = require('../services/sanciones');
+            const res = await levantarSancion(targetId, guildId, interaction.user.id);
+
+            if (!res.ok) {
+                return interaction.editReply({ content: `❌ No se pudo levantar la sanción: ${res.motivo || res.error}` });
+            }
+
+            const desc = `Se han levantado todas las restricciones de apuestas y duelos para <@${targetId}>.\n` +
+                `El usuario ya puede volver a participar con normalidad en La Cripta.`;
+
+            return interaction.editReply({ embeds: [basePremium('🔓 Sanción Levantada / Indulto', desc, COLORES.verde)] });
+        }
+
         // ── 1. Respaldo Manual desde Botón ──
         if (accion === 'panel_backup') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });

@@ -77,7 +77,9 @@ module.exports = {
                             { name: '🎵 Reproductor de Música', value: 'musica' },
                             { name: '🎨 Bóveda de Stickers', value: 'stickers' },
                             { name: '⚙️ Panel Maestro de Administración', value: 'panel' },
-                            { name: '🎂 Canal de Cumpleaños', value: 'cumpleanos' }
+                            { name: '🎲 Logs Privados de Apuestas', value: 'logs_apuestas' },
+                            { name: '⚔️ Logs Privados de Duelos', value: 'logs_duelos' },
+                            { name: '🚨 Panel de Sanciones y Seguridad', value: 'sanciones' }
                         )
                 )
                 .addChannelOption((opt) =>
@@ -289,6 +291,59 @@ module.exports = {
                         .setName('ver')
                         .setDescription('Muestra todos los roles y usuarios en la lista negra')
                 )
+        )
+        // ── Logs Privados de Apuestas en BD ──
+        .addSubcommand((sub) =>
+            sub
+                .setName('logs_apuestas')
+                .setDescription('Consulta el registro privado de apuestas guardado en la base de datos')
+                .addUserOption((opt) => opt.setName('usuario').setDescription('Filtrar por cazador específico'))
+                .addStringOption((opt) =>
+                    opt
+                        .setName('juego')
+                        .setDescription('Filtrar por minijuego')
+                        .addChoices(
+                            { name: '🪙 Cara o Cruz', value: 'cara_cruz' },
+                            { name: '🎰 Tragamonedas', value: 'tragamonedas' },
+                            { name: '🎲 Dados Malditos', value: 'dados' },
+                            { name: '🎡 Ruleta Calabaza', value: 'ruleta' }
+                        )
+                )
+                .addIntegerOption((opt) => opt.setName('cantidad').setDescription('Cantidad de registros (máx 25)').setMinValue(1).setMaxValue(25))
+        )
+        // ── Logs Privados de Duelos en BD ──
+        .addSubcommand((sub) =>
+            sub
+                .setName('logs_duelos')
+                .setDescription('Consulta el registro privado de duelos guardado en la base de datos')
+                .addUserOption((opt) => opt.setName('usuario').setDescription('Filtrar por duelista específico'))
+                .addIntegerOption((opt) => opt.setName('cantidad').setDescription('Cantidad de registros (máx 25)').setMinValue(1).setMaxValue(25))
+        )
+        // ── Gestión y Auditoría de Sanciones ──
+        .addSubcommandGroup((grp) =>
+            grp
+                .setName('sanciones')
+                .setDescription('Gestión de sanciones activas, sanciones manuales e indultos')
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('ver')
+                        .setDescription('Lista los usuarios con sanciones o bloqueos activos')
+                )
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('aplicar')
+                        .setDescription('Aplica una sanción temporal o descuento de huesos a un usuario')
+                        .addUserOption((opt) => opt.setName('usuario').setDescription('Cazador a sancionar').setRequired(true))
+                        .addIntegerOption((opt) => opt.setName('duracion_minutos').setDescription('Duración en minutos (ej: 60 = 1 hora)').setRequired(true).setMinValue(1))
+                        .addIntegerOption((opt) => opt.setName('porcentaje_multa').setDescription('% de huesos a descontar (0 a 100)').setMinValue(0).setMaxValue(100))
+                        .addStringOption((opt) => opt.setName('razon').setDescription('Motivo de la sanción'))
+                )
+                .addSubcommand((sub) =>
+                    sub
+                        .setName('quitar')
+                        .setDescription('Levanta las sanciones de un usuario de inmediato')
+                        .addUserOption((opt) => opt.setName('usuario').setDescription('Cazador a indultar').setRequired(true))
+                )
         ),
 
     async ejecutar(interaction, client) {
@@ -484,6 +539,73 @@ module.exports = {
                 );
 
                 return interaction.editReply({ embeds: [embed] });
+            }
+        }
+
+        // ══════ GESTIÓN DE SANCIONES Y AUDITORÍA ══════
+        if (group === 'sanciones') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            if (sub === 'ver') {
+                const { obtenerSancionesActivas } = require('../services/logger');
+                const sancionados = await obtenerSancionesActivas(guildId);
+
+                if (!sancionados.length) {
+                    return interaction.editReply({
+                        embeds: [basePremium('🕊️ Sin Sanciones Activas', 'No hay ningún cazador con sanciones, silencios ni bloqueos activos en este momento.', COLORES.verde)],
+                    });
+                }
+
+                const lineas = sancionados.map((u, i) => {
+                    const unixSilencio = u.silencioApuestasHasta ? Math.floor(new Date(u.silencioApuestasHasta).getTime() / 1000) : null;
+                    const tiempoStr = unixSilencio ? `<t:${unixSilencio}:R>` : 'Indefinido';
+                    return `**${i + 1}.** <@${u.userId}> • **${formatoNum(u.huesos)} 🦴** | Expira: ${tiempoStr} | Sospechas: \`${u.sospechas || 0}\``;
+                });
+
+                const embed = basePremium('🚨 Sanciones y Bloqueos Activos', lineas.join('\n'), COLORES.rojo);
+                return interaction.editReply({ embeds: [embed] });
+            }
+
+            if (sub === 'aplicar') {
+                const targetUser = interaction.options.getUser('usuario');
+                const duracionMin = interaction.options.getInteger('duracion_minutos');
+                const pctMulta = interaction.options.getInteger('porcentaje_multa') || 0;
+                const razon = interaction.options.getString('razon') || 'Sanción manual preventiva';
+
+                const { sancionarUsuario } = require('../services/sanciones');
+                const res = await sancionarUsuario(targetUser.id, guildId, razon, {
+                    duracionMs: duracionMin * 60 * 1000,
+                    factor: pctMulta / 100,
+                    adminId: interaction.user.id,
+                });
+
+                if (!res.ok) {
+                    return interaction.editReply({ content: `❌ No se pudo aplicar la sanción: ${res.motivo || res.error}` });
+                }
+
+                const unixExp = Math.floor(new Date(res.expiraEn).getTime() / 1000);
+                const desc = `El cazador <@${targetUser.id}> ha sido sancionado exitosamente.\n\n` +
+                    `• **⏱️ Expira:** <t:${unixExp}:R> (${duracionMin} minutos)\n` +
+                    `• **💸 Multa aplicada:** -${formatoNum(res.perdida)} huesos (${pctMulta}%)\n` +
+                    `• **📋 Motivo:** ${razon}\n` +
+                    `• **🛡️ Sancionado por:** <@${interaction.user.id}>`;
+
+                return interaction.editReply({ embeds: [basePremium('🚨 Sanción Manual Aplicada', desc, COLORES.rojo)] });
+            }
+
+            if (sub === 'quitar') {
+                const targetUser = interaction.options.getUser('usuario');
+                const { levantarSancion } = require('../services/sanciones');
+                const res = await levantarSancion(targetUser.id, guildId, interaction.user.id);
+
+                if (!res.ok) {
+                    return interaction.editReply({ content: `❌ No se pudo levantar la sanción: ${res.motivo || res.error}` });
+                }
+
+                const desc = `Se han levantado todas las restricciones de apuestas y duelos para <@${targetUser.id}>.\n` +
+                    `El usuario ya puede volver a participar con normalidad en La Cripta.`;
+
+                return interaction.editReply({ embeds: [basePremium('🔓 Sanción Levantada / Indulto', desc, COLORES.verde)] });
             }
         }
 
@@ -694,6 +816,48 @@ module.exports = {
                 await logAdmin(guildId, interaction.user.id, 'Canal Cumpleaños', `Configurado: <#${canal.id}>`);
                 return interaction.editReply({ embeds: [basePremium('✅ Canal de Cumpleaños Configurado', `Las celebraciones de cumpleaños se publicarán en <#${canal.id}>.`, COLORES.verde)] });
             }
+
+            if (tipo === 'logs_apuestas') {
+                await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalLogsApuestasId: canal.id } }, { upsert: true, new: true });
+                const { protegerCanalSoloLectura } = require('../services/canalCripta');
+                await protegerCanalSoloLectura(canal, client);
+                await logAdmin(guildId, interaction.user.id, 'Canal Logs Apuestas', `Configurado: <#${canal.id}>`);
+                return interaction.editReply({
+                    embeds: [basePremium(
+                        '✅ Canal de Logs Privados de Apuestas Configurado',
+                        `El canal <#${canal.id}> registrará minuciosamente cada tirada de apuestas (ganancias, pérdidas, montos y saldos).`,
+                        COLORES.verde
+                    )],
+                });
+            }
+
+            if (tipo === 'logs_duelos') {
+                await ConfigEvento.findOneAndUpdate({ guildId }, { $set: { canalLogsDuelosId: canal.id } }, { upsert: true, new: true });
+                const { protegerCanalSoloLectura } = require('../services/canalCripta');
+                await protegerCanalSoloLectura(canal, client);
+                await logAdmin(guildId, interaction.user.id, 'Canal Logs Duelos', `Configurado: <#${canal.id}>`);
+                return interaction.editReply({
+                    embeds: [basePremium(
+                        '✅ Canal de Logs Privados de Duelos Configurado',
+                        `El canal <#${canal.id}> registrará minuciosamente todos los duelos finalizados con detalles de duelistas, apuestas y resolución.`,
+                        COLORES.verde
+                    )],
+                });
+            }
+
+            if (tipo === 'sanciones') {
+                const { configurarCanalSanciones } = require('../services/panelSanciones');
+                const { protegerCanalSoloLectura } = require('../services/canalCripta');
+                await protegerCanalSoloLectura(canal, client);
+                await configurarCanalSanciones(interaction.guildId, canal.id, client);
+                return interaction.editReply({
+                    embeds: [basePremium(
+                        '✅ Panel de Sanciones y Seguridad Configurado',
+                        `El panel interactivo permanente de sanciones y auditoría ha sido fijado en <#${canal.id}>.`,
+                        COLORES.rojo
+                    )],
+                });
+            }
         }
 
         if (sub === 'rol_alertas') {
@@ -798,6 +962,8 @@ module.exports = {
                     { name: '🎂 Cumpleaños', value: formatCanal(config?.canalCumpleanosId), inline: true },
                     { name: '📢 Logs Públicos', value: formatCanal(config?.canalLogsPublicosId), inline: true },
                     { name: '🛡️ Logs Admin', value: formatCanal(config?.canalLogsId), inline: true },
+                    { name: '🎲 Logs Apuestas (Priv)', value: formatCanal(config?.canalLogsApuestasId), inline: true },
+                    { name: '⚔️ Logs Duelos (Priv)', value: formatCanal(config?.canalLogsDuelosId), inline: true },
                     { name: '🏆 Ranking/Fama', value: formatCanal(config?.canalSalonFamaId), inline: true },
                     { name: '📢 Anuncios', value: formatCanal(config?.canalAnunciosId), inline: true },
                     { name: '🔔 Alertas Halloween', value: config?.rolNotificacionesEventoId ? `<@&${config.rolNotificacionesEventoId}>` : '⚪ Auto (por botón)', inline: true },
@@ -987,6 +1153,71 @@ module.exports = {
 
             await logAdmin(guildId, interaction.user.id, 'Modo Test', `${activar ? 'Activado' : 'Desactivado'} — Canal: ${conf.canalTestId || 'Ninguno'}`);
 
+            return interaction.editReply({ embeds: [embed] });
+        }
+
+        // ══════ LOGS DE APUESTAS (BD) ══════
+        if (sub === 'logs_apuestas') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const targetUser = interaction.options.getUser('usuario');
+            const juego = interaction.options.getString('juego');
+            const cantidad = interaction.options.getInteger('cantidad') || 10;
+
+            const { obtenerLogsApuesta } = require('../services/logger');
+            const logs = await obtenerLogsApuesta(guildId, { userId: targetUser?.id, juego, limite: cantidad });
+
+            if (!logs.length) {
+                return interaction.editReply({
+                    embeds: [basePremium('📜 Sin Registros de Apuestas', 'No se encontraron apuestas con los filtros seleccionados en la base de datos.', COLORES.gris)],
+                });
+            }
+
+            const lineas = logs.map((l, i) => {
+                const fecha = l.createdAt || l.creadoEn || new Date();
+                const unix = Math.floor(new Date(fecha).getTime() / 1000);
+                const resIcon = l.gano ? '🎉' : '💀';
+                const premioStr = l.gano ? `+${formatoNum(l.premio)} 🦴` : `-${formatoNum(l.monto)} 🦴`;
+                return `**${i + 1}.** <t:${unix}:d> <t:${unix}:t> • <@${l.userId}> [**${l.juego}**]: ${resIcon} ${premioStr}\n> 📝 *${l.detalle || 'Tirada'}*`;
+            });
+
+            const tituloFiltro = targetUser ? `de <@${targetUser.id}>` : (juego ? `de ${juego}` : 'Recientes');
+            const embed = basePremium(
+                `🎲 Auditoría de Apuestas • ${tituloFiltro}`,
+                `Mostrando los últimos **${logs.length}** registros guardados:\n\n` + lineas.join('\n\n'),
+                COLORES.naranja
+            );
+            return interaction.editReply({ embeds: [embed] });
+        }
+
+        // ══════ LOGS DE DUELOS (BD) ══════
+        if (sub === 'logs_duelos') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const targetUser = interaction.options.getUser('usuario');
+            const cantidad = interaction.options.getInteger('cantidad') || 10;
+
+            const { obtenerLogsDuelo } = require('../services/logger');
+            const logs = await obtenerLogsDuelo(guildId, { userId: targetUser?.id, limite: cantidad });
+
+            if (!logs.length) {
+                return interaction.editReply({
+                    embeds: [basePremium('📜 Sin Registros de Duelos', 'No se encontraron duelos finalizados en la base de datos con los criterios solicitados.', COLORES.gris)],
+                });
+            }
+
+            const lineas = logs.map((l, i) => {
+                const fecha = l.createdAt || l.creadoEn || new Date();
+                const unix = Math.floor(new Date(fecha).getTime() / 1000);
+                return `**${i + 1}.** <t:${unix}:d> <t:${unix}:t> • <@${l.retadorId}> vs <@${l.rivalId}>\n` +
+                    `> 🏆 **Ganador:** <@${l.ganadorId}> (+${formatoNum(l.premio)} 🦴 de ${formatoNum(l.monto * 2)} 🦴 pozo)\n` +
+                    `> 📝 *${l.detalle || 'Duelo completado'}*`;
+            });
+
+            const tituloFiltro = targetUser ? `de <@${targetUser.id}>` : 'Recientes';
+            const embed = basePremium(
+                `⚔️ Auditoría de Duelos • ${tituloFiltro}`,
+                `Mostrando los últimos **${logs.length}** duelos registrados:\n\n` + lineas.join('\n\n'),
+                COLORES.morado
+            );
             return interaction.editReply({ embeds: [embed] });
         }
     },

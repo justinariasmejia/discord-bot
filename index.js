@@ -20,6 +20,11 @@ const client = new Client({
 client.commands = new Collection();       // slash commands por nombre
 client.interacciones = new Collection();  // botones/selects/modales por prefijo de customId
 
+const { setLogClient } = require('./src/services/logger');
+const { setClientSanciones } = require('./src/services/panelSanciones');
+setLogClient(client);
+setClientSanciones(client);
+
 (async () => {
     for (const variable of ['DISCORD_TOKEN', 'CLIENT_ID', 'MONGODB_URI']) {
         if (!process.env[variable]) {

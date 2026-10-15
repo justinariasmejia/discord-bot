@@ -32,6 +32,26 @@ const {
     filaVolver,
 } = require('../utils/paneles');
 
+async function safeDeferUpdate(interaction) {
+    if (!interaction.deferred && !interaction.replied) {
+        return interaction.deferUpdate().catch(() => null);
+    }
+}
+
+async function safeEditReply(interaction, payload) {
+    try {
+        if (interaction.deferred || interaction.replied) {
+            return await interaction.editReply(payload);
+        }
+        if (interaction.isButton() || interaction.isAnySelectMenu()) {
+            return await interaction.update(payload);
+        }
+        return await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
+    } catch {
+        /* silenciar errores si la interacción expiró o fue respondida */
+    }
+}
+
 module.exports = {
     prefijo: 'cripta',
 
@@ -63,44 +83,44 @@ module.exports = {
 
         // ── 1. Menú Principal ──
         if (accion === 'menu') {
-            await interaction.deferUpdate();
+            await safeDeferUpdate(interaction);
             const usuario = await obtenerUsuario(duenoId, interaction.guildId);
-            return interaction.editReply(panelMenu(duenoId, usuario));
+            return safeEditReply(interaction, panelMenu(duenoId, usuario));
         }
 
         // ── 2. Cazar ──
         if (accion === 'cazar') {
-            await interaction.deferUpdate();
+            await safeDeferUpdate(interaction);
             const res = await cazar(duenoId, interaction.guildId, esStaffOTester);
 
             if (!res.ok) {
                 logCaza(interaction.guildId, duenoId, res).catch(() => null);
-                return interaction.editReply(panelCazar(duenoId, res));
+                return safeEditReply(interaction, panelCazar(duenoId, res));
             }
 
-            await interaction.editReply(panelCazarAnimacion(1));
+            await safeEditReply(interaction, panelCazarAnimacion(1));
             await new Promise((resolve) => setTimeout(resolve, configBalance.CAZAR?.DELAY_ANIMACION_MS || 1200));
 
-            await interaction.editReply(panelCazarAnimacion(2));
+            await safeEditReply(interaction, panelCazarAnimacion(2));
             await new Promise((resolve) => setTimeout(resolve, configBalance.CAZAR?.DELAY_ANIMACION_MS || 1200));
 
             logCaza(interaction.guildId, duenoId, res).catch(() => null);
-            return interaction.editReply(panelCazar(duenoId, res));
+            return safeEditReply(interaction, panelCazar(duenoId, res));
         }
 
         // ── 3. Ranking ──
         if (accion === 'ranking') {
-            await interaction.deferUpdate();
+            await safeDeferUpdate(interaction);
             const pagina = extra ? parseInt(extra, 10) : 1;
             const datosRanking = await obtenerRanking(interaction.guildId, duenoId, pagina);
-            return interaction.editReply(panelRanking(duenoId, datosRanking));
+            return safeEditReply(interaction, panelRanking(duenoId, datosRanking));
         }
 
         // ── 4. Panel de Apuestas ──
         if (accion === 'apostar') {
-            await interaction.deferUpdate();
+            await safeDeferUpdate(interaction);
             const usuario = await obtenerUsuario(duenoId, interaction.guildId);
-            return interaction.editReply(panelMenuApuestas(duenoId, usuario));
+            return safeEditReply(interaction, panelMenuApuestas(duenoId, usuario));
         }
 
         // ── 5. Selección de Juego de Apuestas (Botones y Selects) ──
@@ -143,42 +163,43 @@ module.exports = {
             }
 
             if (juego === 'cara_cruz') {
-                await interaction.deferUpdate();
+                await safeDeferUpdate(interaction);
                 const usuario = await obtenerUsuario(duenoId, interaction.guildId);
-                return interaction.editReply(panelConsolaCaraCruz(duenoId, usuario));
+                return safeEditReply(interaction, panelConsolaCaraCruz(duenoId, usuario));
             }
 
             if (juego === 'tragamonedas') {
-                await interaction.deferUpdate();
+                await safeDeferUpdate(interaction);
                 const usuario = await obtenerUsuario(duenoId, interaction.guildId);
-                return interaction.editReply(panelConsolaTragamonedas(duenoId, usuario));
+                return safeEditReply(interaction, panelConsolaTragamonedas(duenoId, usuario));
             }
         }
 
         // ── 6. Diario ──
         if (accion === 'diario') {
-            await interaction.deferUpdate();
+            await safeDeferUpdate(interaction);
             const res = await reclamarDiario(duenoId, interaction.guildId);
             if (res.ok) {
                 logDiario(interaction.guildId, duenoId, res).catch(() => null);
             }
-            return interaction.editReply(panelDiario(duenoId, res));
+            return safeEditReply(interaction, panelDiario(duenoId, res));
         }
 
         // ── 7. Perfil ──
         if (accion === 'perfil') {
-            await interaction.deferUpdate();
+            await safeDeferUpdate(interaction);
             const usuario = await obtenerUsuario(duenoId, interaction.guildId);
             const { posicion, total } = await posicionRanking(interaction.guildId, usuario.huesos);
-            return interaction.editReply(
+            return safeEditReply(
+                interaction,
                 panelPerfil(duenoId, usuario, interaction.user.username, posicion, total, interaction.user.displayAvatarURL())
             );
         }
 
         // ── 8. Guía y Ayuda ──
         if (accion === 'ayuda') {
-            await interaction.deferUpdate();
-            return interaction.editReply(panelAyuda(duenoId));
+            await safeDeferUpdate(interaction);
+            return safeEditReply(interaction, panelAyuda(duenoId));
         }
 
         // ════════════════════════════════════════════════════════════════════

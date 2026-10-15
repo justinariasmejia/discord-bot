@@ -8,6 +8,10 @@ const configSchema = new Schema({
     mensajeSalonFamaId: { type: String, default: null },   // ID del mensaje editable del ranking
     canalLogsId: { type: String, default: null },           // Logs detallados de administración y seguridad
     canalLogsPublicosId: { type: String, default: null },   // Logs públicos en tiempo real de justificación de huesos
+    canalLogsApuestasId: { type: String, default: null },   // Logs privados detallados de apuestas
+    canalLogsDuelosId: { type: String, default: null },     // Logs privados detallados de duelos
+    canalSancionesId: { type: String, default: null },       // Canal dedicado para el panel y registro de sanciones
+    mensajeSancionesId: { type: String, default: null },     // ID del mensaje maestro fijo del panel de sanciones
     canalAnunciosId: { type: String, default: null },       // Anuncios admin/moderación
     canalJuegosId: { type: String, default: null },         // Canal exclusivo para juegos/apuestas
     canalMusicaId: { type: String, default: null },         // Canal dedicado para pedidos de música

@@ -12,6 +12,7 @@ const { cargarCanalesAdminPanel } = require('../services/panelAdmin');
 const { cargarCanalesCumpleanos, iniciarServicioCumpleanos } = require('../services/cumpleanos');
 const { iniciarServicioBackups } = require('../services/backup');
 const { iniciarServicioVoz } = require('../services/actividad');
+const { setClientSanciones, actualizarPanelSanciones } = require('../services/panelSanciones');
 
 module.exports = {
     name: 'clientReady',
@@ -48,6 +49,12 @@ module.exports = {
 
         // Cargar panel permanente de Cumpleaños
         await cargarCanalesCumpleanos(client);
+
+        // Cargar y sincronizar panel permanente de Sanciones
+        setClientSanciones(client);
+        for (const guild of client.guilds.cache.values()) {
+            actualizarPanelSanciones(guild.id, client).catch(() => null);
+        }
 
         // Limpieza preventiva de mensajes de eventos o trivias expiradas en el canal
         for (const guild of client.guilds.cache.values()) {

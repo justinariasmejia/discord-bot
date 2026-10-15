@@ -50,6 +50,17 @@ async function responderInicial(interaction, payload) {
     }
 }
 
+async function responderFinal(interaction, payload) {
+    try {
+        if (interaction.deferred || interaction.replied) {
+            return await interaction.editReply(payload);
+        }
+        return await responderInicial(interaction, payload);
+    } catch {
+        /* silenciar errores de interacción expirada o cancelada */
+    }
+}
+
 async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
     // 🛡️ Anti-Spam: Bloquear si ya hay un giro o cálculo activo para este cazador
     if (tiradasEnProgreso.has(duenoId)) {
@@ -106,7 +117,7 @@ async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
         if (res.ok) {
             logApuesta(interaction.guildId, duenoId, res).catch(() => null);
         }
-        return interaction.editReply(panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
+        return responderFinal(interaction, panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
     }
 
     if (tipoJuego === 'tragamonedas') {
@@ -122,7 +133,7 @@ async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
         if (res.ok) {
             logApuesta(interaction.guildId, duenoId, res).catch(() => null);
         }
-        return interaction.editReply(panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
+        return responderFinal(interaction, panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
     }
 
     if (tipoJuego === 'dados') {
@@ -142,13 +153,19 @@ async function resolverJuego(interaction, duenoId, tipoJuego, monto, extra) {
         }
 
         const res = await apostarDados(duenoId, interaction.guildId, monto, tipoTier, valorExtra);
-        return interaction.editReply(panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
+        if (res.ok) {
+            logApuesta(interaction.guildId, duenoId, res).catch(() => null);
+        }
+        return responderFinal(interaction, panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
     }
 
     if (tipoJuego === 'ruleta') {
         const res = await apostarRuleta(duenoId, interaction.guildId, monto, extra);
-        return responderInicial(interaction, panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
+        if (res.ok) {
+            logApuesta(interaction.guildId, duenoId, res).catch(() => null);
         }
+        return responderFinal(interaction, panelResultadoApuesta(duenoId, res, tipoJuego, monto, extra));
+    }
     } finally {
         tiradasEnProgreso.delete(duenoId);
     }

@@ -1,10 +1,78 @@
 // src/services/apuestas.js
-// Lógica de negocio y resolución de juegos de apuestas con consumo de pociones.
+// Lógica de negocio y resolución de juegos de apuestas con prevención de abuso y auditoría.
 const Usuario = require('../models/Usuario');
+const config = require('../data/config');
 const { obtenerUsuario, modificarHuesos } = require('./economia');
 const { obtenerConfig, eventoActivo, esAdminOTester } = require('./evento');
 const { conBloqueo } = require('../utils/locks');
-const config = require('../data/config');
+const { sancionarUsuario } = require('./sanciones');
+
+/**
+ * Registra una apuesta en la ventana horaria del usuario y aplica control de abuso.
+ * @param {object} usuario
+ * @param {string} userId
+ * @param {string} guildId
+ * @returns {Promise<{ ok: boolean, motivo?: string, maxHora?: number }>}
+ */
+async function registrarApuestaHora(usuario, userId, guildId) {
+    if (!config.APUESTAS?.ENABLE_ANTI_FRAUDE) return { ok: true };
+    const ahora = Date.now();
+    const ventanaMs = 60 * 60 * 1000;
+    const inicioVentana = usuario.apuestasHoraInicio ? new Date(usuario.apuestasHoraInicio).getTime() : 0;
+
+    if (!inicioVentana || ahora - inicioVentana >= ventanaMs) {
+        await Usuario.updateOne(
+            { userId, guildId },
+            { $set: { apuestasCountHora: 1, apuestasHoraInicio: new Date() } }
+        );
+        usuario.apuestasCountHora = 1;
+        usuario.apuestasHoraInicio = new Date();
+        return { ok: true };
+    }
+
+    const nuevoConteo = (usuario.apuestasCountHora || 0) + 1;
+    await Usuario.updateOne(
+        { userId, guildId },
+        { $set: { apuestasCountHora: nuevoConteo } }
+    );
+    usuario.apuestasCountHora = nuevoConteo;
+
+    const maxHora = config.APUESTAS?.MAX_APUESTAS_PER_HORA || 30;
+    if (nuevoConteo > maxHora) {
+        await Usuario.updateOne({ userId, guildId }, { $inc: { sospechas: 1 } });
+        const usrActualizado = await Usuario.findOne({ userId, guildId });
+        if ((usrActualizado.sospechas || 0) >= (config.APUESTAS.SUSPICION_THRESHOLD || 3)) {
+            await sancionarUsuario(userId, guildId, 'Exceso reiterado de apuestas por hora (posible automatización o bot)');
+        }
+        return { ok: false, motivo: 'exceso_apuestas_hora', maxHora };
+    }
+    return { ok: true };
+}
+
+/**
+ * Valida estado de sanciones, límites horarios y saldo antes de procesar una apuesta.
+ */
+async function procesarApuestaPrevia(usuario, userId, guildId, monto) {
+    const ahora = Date.now();
+    if (usuario.silencioApuestasHasta && ahora < new Date(usuario.silencioApuestasHasta).getTime()) {
+        return { valida: false, motivo: 'silenciado', expira: usuario.silencioApuestasHasta };
+    }
+    if (usuario.bloqueoApuestasHasta && ahora < new Date(usuario.bloqueoApuestasHasta).getTime()) {
+        return { valida: false, motivo: 'bloqueado', expira: usuario.bloqueoApuestasHasta };
+    }
+
+    const registro = await registrarApuestaHora(usuario, userId, guildId);
+    if (!registro.ok) {
+        return { valida: false, motivo: registro.motivo, maxHora: registro.maxHora };
+    }
+
+    const val = validarApuesta(usuario, monto);
+    if (!val.valida) {
+        return { valida: false, motivo: 'invalido', detalle: val.motivo };
+    }
+
+    return { valida: true, monto: val.monto };
+}
 
 // ── Cooldown Inteligente Progresivo y Sistema de Fatiga Anti-Spam ──
 // Registra tiros seguidos para escalar el tiempo de enfriamiento:
@@ -235,8 +303,10 @@ async function apostarCaraCruz(userId, guildId, monto, eleccion) {
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const usuario = await obtenerUsuario(userId, guildId);
-        const val = validarApuesta(usuario, monto);
-        if (!val.valida) return { ok: false, motivo: 'invalido', detalle: val.motivo };
+        const val = await procesarApuestaPrevia(usuario, userId, guildId, monto);
+        if (!val.valida) {
+            return { ok: false, motivo: val.motivo, detalle: val.detalle, expira: val.expira, maxHora: val.maxHora };
+        }
 
         monto = val.monto;
         const deducido = await modificarHuesos(userId, guildId, -monto, 'apuesta', 'Apuesta Cara o Cruz');
@@ -292,8 +362,10 @@ async function apostarDados(userId, guildId, monto, tipoTier, valorExtra) {
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const usuario = await obtenerUsuario(userId, guildId);
-        const val = validarApuesta(usuario, monto);
-        if (!val.valida) return { ok: false, motivo: 'invalido', detalle: val.motivo };
+        const val = await procesarApuestaPrevia(usuario, userId, guildId, monto);
+        if (!val.valida) {
+            return { ok: false, motivo: val.motivo, detalle: val.detalle, expira: val.expira, maxHora: val.maxHora };
+        }
 
         monto = val.monto;
         const deducido = await modificarHuesos(userId, guildId, -monto, 'apuesta', 'Apuesta Dados Malditos');
@@ -377,8 +449,10 @@ async function apostarRuleta(userId, guildId, monto, colorElegido) {
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const usuario = await obtenerUsuario(userId, guildId);
-        const val = validarApuesta(usuario, monto);
-        if (!val.valida) return { ok: false, motivo: 'invalido', detalle: val.motivo };
+        const val = await procesarApuestaPrevia(usuario, userId, guildId, monto);
+        if (!val.valida) {
+            return { ok: false, motivo: val.motivo, detalle: val.detalle, expira: val.expira, maxHora: val.maxHora };
+        }
 
         monto = val.monto;
         const deducido = await modificarHuesos(userId, guildId, -monto, 'apuesta', 'Apuesta Ruleta');
@@ -452,8 +526,10 @@ async function apostarTragamonedas(userId, guildId, monto) {
 
     const bloqueo = await conBloqueo(`${guildId}:${userId}`, async () => {
         const usuario = await obtenerUsuario(userId, guildId);
-        const val = validarApuesta(usuario, monto);
-        if (!val.valida) return { ok: false, motivo: 'invalido', detalle: val.motivo };
+        const val = await procesarApuestaPrevia(usuario, userId, guildId, monto);
+        if (!val.valida) {
+            return { ok: false, motivo: val.motivo, detalle: val.detalle, expira: val.expira, maxHora: val.maxHora };
+        }
 
         monto = val.monto;
         const deducido = await modificarHuesos(userId, guildId, -monto, 'apuesta', 'Apuesta Tragamonedas');
