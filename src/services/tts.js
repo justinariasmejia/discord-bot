@@ -85,6 +85,11 @@ function limpiarTextoParaVoz(textoBruto) {
         texto = texto.slice(0, 197) + '...';
     }
 
+    // 8. Si el texto no contiene al menos una letra o número, ignorarlo (evita decir "punto" para ".")
+    if (!/[\p{L}\p{N}]/u.test(texto)) {
+        return '';
+    }
+
     return texto;
 }
 
@@ -283,10 +288,21 @@ function encolarTexto(guildId, textoOriginal, autorInfo = null, nombreOpcional =
     }
 
     const nombreLimpio = limpiarNombreParaVoz(autorNombre);
+    const finalAutorId = autorId || 'anonimo';
+
+    // Si ya hay un mensaje en cola del MISMO autor mientras el bot reproduce,
+    // agrupamos el texto para que la lectura sea fluida, rápida y sin pausas de red
+    const ultimoEnCola = sesion.cola[sesion.cola.length - 1];
+    if (ultimoEnCola && !ultimoEnCola.esSistema && !esSistema && ultimoEnCola.autorId === finalAutorId) {
+        if ((ultimoEnCola.texto.length + textoLimpio.length) < 220) {
+            ultimoEnCola.texto += `, ${textoLimpio}`;
+            return true;
+        }
+    }
 
     sesion.cola.push({
         texto: textoLimpio,
-        autorId: autorId || 'anonimo',
+        autorId: finalAutorId,
         autorNombre: nombreLimpio || 'Usuario',
         esSistema: Boolean(esSistema),
         timestamp: Date.now(),
@@ -328,12 +344,11 @@ async function procesarSiguienteEnCola(guildId) {
         frase = item.texto;
         sesion.ultimoAutorId = null;
     } else {
+        // Regla estricta: solo decir el nombre si el autor anterior fue alguien más (o es el primer mensaje).
+        // Si los mensajes son seguidos de la MISMA persona, jamás repetir su nombre.
         const esMismoAutor = Boolean(sesion.ultimoAutorId && sesion.ultimoAutorId === item.autorId);
-        const tiempoPasado = Date.now() - (sesion.ultimoTiempoMensaje || 0);
-        // Continuidad: solo si el mismo usuario escribe de inmediato en menos de 8 segundos sin interrupción
-        const esSeguido = esMismoAutor && tiempoPasado < 8000;
 
-        if (esSeguido) {
+        if (esMismoAutor) {
             frase = item.texto;
         } else {
             frase = `${item.autorNombre} dice: ${item.texto}`;
