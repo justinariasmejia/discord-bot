@@ -139,7 +139,7 @@ module.exports = {
             return;
         }
 
-        // ── 2. Responder Trivia del Terror (2 intentos por persona) ──
+        // ── 2. Responder Trivia del Terror (1 intento único por persona) ──
         if (accion === 'trivia') {
             const opcionElegida = parseInt(extra, 10);
             const ev = await EventoAleatorio.findById(eventoId);
@@ -151,15 +151,24 @@ module.exports = {
                 });
             }
 
+            // Verificar tiempo de lectura obligatorio (5 segundos)
+            if (ev.datos?.desbloqueaEn && Date.now() < new Date(ev.datos.desbloqueaEn).getTime()) {
+                const segsRestantes = Math.ceil((new Date(ev.datos.desbloqueaEn).getTime() - Date.now()) / 1000);
+                return safeReply(interaction, {
+                    content: `📖 **¡Tiempo de lectura obligatorio!** Lee la pregunta con calma; los botones se desbloquearán en **${segsRestantes} segundo(s)**.`,
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
             if (!ev.datos) ev.datos = {};
             if (!ev.datos.intentos) ev.datos.intentos = {};
 
             const intentosPrevios = ev.datos.intentos[userId] || 0;
 
-            // Límite de 2 intentos por persona
-            if (intentosPrevios >= 2) {
+            // 🎯 Límite estricto de 1 intento por persona
+            if (intentosPrevios >= 1) {
                 return safeReply(interaction, {
-                    content: '💀 **Intentos agotados:** Ya has utilizado tus **2 intentos** permitidos en esta pregunta. ¡Espera a la siguiente trivia!',
+                    content: '💀 **Ya has participado:** Solo se permite **1 intento** por persona en cada trivia. ¡Espera a la siguiente pregunta!',
                     flags: MessageFlags.Ephemeral,
                 });
             }
@@ -167,24 +176,16 @@ module.exports = {
             const esCorrecta = opcionElegida === ev.datos.correcta;
 
             if (!esCorrecta) {
-                const nuevosIntentos = intentosPrevios + 1;
-                // Actualización atómica en base de datos para prevenir conflictos de concurrencia
+                // Registrar fallo y descalificar de inmediato de esta trivia
                 await EventoAleatorio.updateOne(
                     { _id: eventoId },
-                    { $set: { [`datos.intentos.${userId}`]: nuevosIntentos } }
+                    { $set: { [`datos.intentos.${userId}`]: 1 } }
                 );
 
-                if (nuevosIntentos === 1) {
-                    return safeReply(interaction, {
-                        content: '❌ **¡Respuesta incorrecta!** Te queda **1 intento más**. ¡Aún estás a tiempo de intentar con otra opción!',
-                        flags: MessageFlags.Ephemeral,
-                    });
-                } else {
-                    return safeReply(interaction, {
-                        content: '💀 **¡Respuesta incorrecta!** Has fallado tus **2 intentos** en esta pregunta y has quedado descalificado.',
-                        flags: MessageFlags.Ephemeral,
-                    });
-                }
+                return safeReply(interaction, {
+                    content: '❌ **¡Respuesta incorrecta!** Has fallado tu único intento en esta trivia y has quedado descalificado. ¡Más suerte en la próxima!',
+                    flags: MessageFlags.Ephemeral,
+                });
             }
 
             // Si es correcta, intentar reclamar atómicamente

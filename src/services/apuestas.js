@@ -41,7 +41,24 @@ async function registrarApuestaHora(usuario, userId, guildId) {
     if (nuevoConteo > maxHora) {
         await Usuario.updateOne({ userId, guildId }, { $inc: { sospechas: 1 } });
         const usrActualizado = await Usuario.findOne({ userId, guildId });
-        if ((usrActualizado.sospechas || 0) >= (config.APUESTAS.SUSPICION_THRESHOLD || 3)) {
+        const sospechasActuales = usrActualizado?.sospechas || 1;
+        const umbral = config.APUESTAS.SUSPICION_THRESHOLD || 3;
+
+        // Emitir log de movimiento sospechoso a logs administrativos y canal de sanciones
+        try {
+            const { logSospecha } = require('./logger');
+            await logSospecha(guildId, userId, {
+                tipo: 'Exceso de Apuestas por Hora',
+                detalle: `El usuario intentó realizar su apuesta número **${nuevoConteo}** en 1 hora (límite permitido: ${maxHora}). Sospechas acumuladas: **${sospechasActuales}/${umbral}**.`,
+                nivel: sospechasActuales >= umbral ? 'critico' : 'advertencia',
+                campos: [
+                    { name: '📊 Apuestas en la última hora', value: `${nuevoConteo} / ${maxHora}`, inline: true },
+                    { name: '⚠️ Nivel de Alerta', value: `${sospechasActuales} de ${umbral}`, inline: true },
+                ],
+            });
+        } catch {}
+
+        if (sospechasActuales >= umbral) {
             await sancionarUsuario(userId, guildId, 'Exceso reiterado de apuestas por hora (posible automatización o bot)');
         }
         return { ok: false, motivo: 'exceso_apuestas_hora', maxHora };

@@ -164,7 +164,7 @@ async function guardarLogApuestaDB({ guildId, userId, juego, monto, gano, premio
                 `**Cazador:** <@${userId}>\n` +
                 `**Juego:** ${juego}\n` +
                 `**Monto apostado:** ${formatoNum(monto)} 🦴\n` +
-                `**Resultado:** ${gano ? `🎉 Victoria (+${formatoNum(premio)} 🦴)` : `💀 Derrota (-${formatoNum(monto)} 🦴)}`}` +
+                `**Resultado:** ${gano ? `🎉 Victoria (+${formatoNum(premio)} 🦴)` : `💀 Derrota (-${formatoNum(monto)} 🦴)`}` +
                 (saldoFinal !== undefined ? `\n**Saldo restante:** ${formatoNum(saldoFinal)} 🦴` : '')
             )
             .addFields([
@@ -433,6 +433,35 @@ async function logAdmin(guildId, adminId, accion, descripcion, campos = []) {
     });
 }
 
+// ── 8. LOG DE MOVIMIENTOS SOSPECHOSOS Y PREVENCIÓN DE FRAUDE ──
+async function logSospecha(guildId, userId, { tipo, detalle, nivel = 'advertencia', campos = [] }) {
+    const color = nivel === 'critico' ? COLORES_LOG.sancion : COLORES_LOG.apuesta;
+    const embed = new EmbedBuilder()
+        .setColor(color)
+        .setTitle(`⚠️ Movimiento Sospechoso • ${tipo}`)
+        .setDescription(`Se ha registrado actividad anómala o sospechosa por parte de <@${userId}>.\n\n**Detalle:** ${detalle}`)
+        .setTimestamp()
+        .setFooter({ text: '🛡️ Sistema de Auditoría y Detección de Fraude • La Cripta' });
+
+    if (userId && _client) {
+        const u = _client.users.cache.get(userId) || await _client.users.fetch(userId).catch(() => null);
+        if (u) embed.setAuthor({ name: `${u.tag} (${userId})`, iconURL: u.displayAvatarURL({ dynamic: true }) });
+    }
+
+    if (campos.length > 0) embed.addFields(campos);
+
+    // 1. Enviar al canal de logs administrativos generales
+    await enviarLogAdmin(guildId, {
+        titulo: `Movimiento Sospechoso: ${tipo}`,
+        descripcion: `**Usuario:** <@${userId}>\n**Detalle:** ${detalle}`,
+        color,
+        campos,
+    });
+
+    // 2. Enviar al canal dedicado de Sanciones para auditoría directa del staff
+    await enviarLogCanalDedicado(guildId, 'canalSancionesId', embed);
+}
+
 module.exports = {
     setLogClient,
     getLogClient: () => _client,
@@ -447,6 +476,7 @@ module.exports = {
     logEvento,
     logSorteo,
     logAdmin,
+    logSospecha,
     // Helpers de persistencia en BD y canal privado
     guardarLogDueloDB,
     guardarLogApuestaDB,

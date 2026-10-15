@@ -57,9 +57,10 @@ async function sancionarUsuario(userId, guildId, reason, opciones = {}) {
             }
         );
 
-        // Notificar en el canal de administración interno y actualizar panel
+        // Notificar en el canal de administración interno, canal de sanciones y actualizar panel
         try {
-            const { logAdmin } = require('./logger');
+            const { logAdmin, enviarLogCanalDedicado } = require('./logger');
+            const { EmbedBuilder } = require('discord.js');
             const { actualizarPanelSanciones } = require('./panelSanciones');
             const adminTexto = opciones.adminId ? `<@${opciones.adminId}>` : '🤖 Sistema Preventivo Anti-Fraude';
             const campos = [
@@ -70,6 +71,17 @@ async function sancionarUsuario(userId, guildId, reason, opciones = {}) {
                 { name: '📋 Motivo', value: reason, inline: false },
             ];
             await logAdmin(guildId, opciones.adminId || null, '🚨 Sanción Aplicada', `Se ha aplicado una sanción a <@${userId}>.`, campos);
+
+            // Enviar alerta dedicada al canal de sanciones
+            const embedSancion = new EmbedBuilder()
+                .setColor(0xd32f2f)
+                .setTitle('🚨 Sanción Disciplinaria Aplicada')
+                .setDescription(`Se ha aplicado una sanción a <@${userId}> por actividad anómala o infracción.`)
+                .addFields(campos)
+                .setTimestamp()
+                .setFooter({ text: '⚖️ Registro Disciplinario • Canal de Sanciones' });
+            await enviarLogCanalDedicado(guildId, 'canalSancionesId', embedSancion);
+
             actualizarPanelSanciones(guildId).catch(() => null);
         } catch (logErr) {
             console.error('Error enviando log de sanción a Discord:', logErr);
@@ -106,9 +118,10 @@ async function levantarSancion(userId, guildId, adminId = null) {
             }
         );
 
-        // Notificar en el canal de administración interno y actualizar panel
+        // Notificar en el canal de administración interno, canal de sanciones y actualizar panel
         try {
-            const { logAdmin } = require('./logger');
+            const { logAdmin, enviarLogCanalDedicado } = require('./logger');
+            const { EmbedBuilder } = require('discord.js');
             const { actualizarPanelSanciones } = require('./panelSanciones');
             const adminTexto = adminId ? `<@${adminId}>` : '🤖 Sistema';
             const campos = [
@@ -117,6 +130,17 @@ async function levantarSancion(userId, guildId, adminId = null) {
                 { name: '✨ Estado', value: 'Permisos de duelos y apuestas restaurados.', inline: false },
             ];
             await logAdmin(guildId, adminId || null, '🔓 Sanción Levantada', `Se han restablecido los permisos de apuestas y duelos para <@${userId}>.`, campos);
+
+            // Enviar alerta dedicada de indulto al canal de sanciones
+            const embedIndulto = new EmbedBuilder()
+                .setColor(0x2e7d32)
+                .setTitle('🔓 Sanción Levantada')
+                .setDescription(`Se han restablecido los permisos de apuestas y duelos para <@${userId}>.`)
+                .addFields(campos)
+                .setTimestamp()
+                .setFooter({ text: '⚖️ Registro Disciplinario • Canal de Sanciones' });
+            await enviarLogCanalDedicado(guildId, 'canalSancionesId', embedIndulto);
+
             actualizarPanelSanciones(guildId).catch(() => null);
         } catch (logErr) {
             console.error('Error enviando log de levantamiento de sanción:', logErr);

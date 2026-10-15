@@ -150,16 +150,19 @@ async function lanzarTrivia(guildId, client, esForzado = false) {
     const triviaItem = PREGUNTAS_TRIVIA[Math.floor(Math.random() * PREGUNTAS_TRIVIA.length)];
     const premio = Math.floor(Math.random() * 76) + 175; // 175 a 250 huesos
     const expiraEn = new Date(Date.now() + 90 * 1000); // 90 segundos
+    const desbloqueaEn = new Date(Date.now() + 5000); // 5 segundos de lectura obligatoria
 
     const letras = ['A', 'B', 'C', 'D'];
-    let desc = `📜 **${triviaItem.pregunta}**\n\n`;
+    let descBase = `📜 **${triviaItem.pregunta}**\n\n`;
     triviaItem.opciones.forEach((opc, idx) => {
-        desc += `**[${letras[idx]}]** ${opc}\n`;
+        descBase += `**[${letras[idx]}]** ${opc}\n`;
     });
-    desc += `\n💰 Recompensa al primer acierto: **+${premio}** huesos 🦴\n` +
-        `⏱️ Tiempo límite: ${tiempoRelativo(expiraEn.getTime())}`;
+    descBase += `\n💰 Recompensa al primer acierto: **+${premio}** huesos 🦴\n` +
+        `⏱️ Tiempo límite: ${tiempoRelativo(expiraEn.getTime())}\n` +
+        `🎯 **Regla:** Solo **1 intento** por persona. ¡Piensa bien antes de responder!`;
 
-    const embed = base('🎃 TRIVIA DEL TERROR', desc, COLORES.naranja);
+    const descInicial = `${descBase}\n\n⏱️ 📖 **Tiempo de lectura:** Los botones se desbloquearán en **5 segundos** para que todos lean la pregunta...`;
+    const embed = base('🎃 TRIVIA DEL TERROR', descInicial, COLORES.naranja);
 
     const docEvento = await EventoAleatorio.create({
         guildId,
@@ -171,29 +174,50 @@ async function lanzarTrivia(guildId, client, esForzado = false) {
             correcta: triviaItem.correcta,
             explicacion: triviaItem.explicacion,
             premio,
+            desbloqueaEn,
         },
         expiraEn,
     });
 
-    const botones = triviaItem.opciones.map((opc, idx) =>
+    // Botones inicialmente bloqueados para dar tiempo de lectura
+    const botonesBloqueados = triviaItem.opciones.map((opc, idx) =>
         new ButtonBuilder()
             .setCustomId(`evento:trivia:todos:${docEvento._id}:${idx}`)
             .setLabel(letras[idx])
-            .setStyle(ButtonStyle.Primary)
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(true)
     );
 
-    const fila = new ActionRowBuilder().addComponents(botones);
+    const filaBloqueada = new ActionRowBuilder().addComponents(botonesBloqueados);
     const avisoNoti = config.rolNotificacionesEventoId ? `🔔 <@&${config.rolNotificacionesEventoId}> ¡Nueva Trivia del Terror disponible! Botín: **+${premio}** huesos 🦴.` : undefined;
     const mensaje = await canal.send({
         content: avisoNoti,
         embeds: [embed],
-        components: [fila],
+        components: [filaBloqueada],
         allowedMentions: { parse: ['roles'] },
     }).catch(() => null);
     if (!mensaje) return null;
 
     docEvento.mensajeId = mensaje.id;
     await docEvento.save();
+
+    // Desbloquear botones tras 5 segundos de lectura
+    setTimeout(async () => {
+        const evCheck = await EventoAleatorio.findById(docEvento._id);
+        if (evCheck && !evCheck.reclamado && evCheck.expiraEn > new Date()) {
+            const botonesActivos = triviaItem.opciones.map((opc, idx) =>
+                new ButtonBuilder()
+                    .setCustomId(`evento:trivia:todos:${docEvento._id}:${idx}`)
+                    .setLabel(letras[idx])
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(false)
+            );
+            const filaActiva = new ActionRowBuilder().addComponents(botonesActivos);
+            const descDesbloqueada = `${descBase}\n\n🔔 **¡BOTONES DESBLOQUEADOS!** ¡El primero en acertar la opción correcta gana el botín!`;
+            const embedActivo = base('🎃 TRIVIA DEL TERROR', descDesbloqueada, COLORES.naranja);
+            await mensaje.edit({ embeds: [embedActivo], components: [filaActiva] }).catch(() => null);
+        }
+    }, 5000);
 
     setTimeout(async () => {
         const ev = await EventoAleatorio.findById(docEvento._id);

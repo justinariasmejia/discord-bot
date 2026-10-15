@@ -301,18 +301,10 @@ module.exports = {
             return;
         }
 
-        // ── Botón Señuelo (Tiro en falso) ──
-        if (accion === 'senuelo') {
-            const dueloId = extra;
-            await interaction.deferUpdate();
-            return resolverDisparo(dueloId, interaction.user.id, true, interaction.channel);
-        }
-
-        // ── Botón Disparar (Válido) ──
-        if (accion === 'disparar') {
-            const dueloId = extra;
-            await interaction.deferUpdate();
-            return resolverDisparo(dueloId, interaction.user.id, false, interaction.channel);
+        // ── Botones Legados (No-op en el nuevo sistema 100% aleatorio) ──
+        if (accion === 'senuelo' || accion === 'disparar') {
+            await interaction.deferUpdate().catch(() => null);
+            return;
         }
     },
 };

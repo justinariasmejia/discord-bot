@@ -201,75 +201,46 @@ async function iniciarMinijuegoDuelo(dueloId, canal) {
     const mensaje = await canal.messages.fetch(duelo.mensajeId).catch(() => null);
     if (!mensaje) return;
 
-    // Paso 1: Cuenta regresiva y señuelo
+    // Anuncio de combate en curso (100% aleatorio, sin botones de reacción)
     const embedEspera = base(
-        '⚔️ ¡Duelo en Progreso!',
-        `**<@${duelo.retadorId}>** vs **<@${duelo.rivalId}>**\n\n` +
-        `💰 **Pozo en disputa:** **${formatoNum(duelo.monto * 2)}** huesos 🦴\n\n` +
-        `👀 *Prepárense... Desenvainen sus armas...*\n` +
-        `⚠️ **¡Cuidado!** Presionar antes de la señal es un tiro en falso y perderás automáticamente.`,
+        '⚔️ ¡Duelo de Honor en Progreso!',
+        `**<@${duelo.retadorId}>** ⚔️ **<@${duelo.rivalId}>**\n\n` +
+        `🦴 **Apuesta individual:** **${formatoNum(duelo.monto)}** huesos\n` +
+        `💰 **Pozo total acumulado:** **${formatoNum(duelo.monto * 2)}** huesos 🦴\n\n` +
+        `🎲 *Las ánimas de la cripta están determinando el destino en combate...*\n` +
+        `⏳ *El combate se resolverá de forma 100% aleatoria e imparcial en unos segundos...*`,
         COLORES.morado
     );
 
     await mensaje.edit({
         embeds: [embedEspera],
-        components: [filaSenueloDuelo(dueloId)],
+        components: [], // Sin botones
     }).catch(() => null);
 
-    // Retardo aleatorio de 2 a 5 segundos
-    const delay = Math.floor(Math.random() * (config.DUELOS.DELAY_MAX_MS - config.DUELOS.DELAY_MIN_MS + 1)) + config.DUELOS.DELAY_MIN_MS;
-
+    // Suspense de 3.5 segundos antes de resolver la tirada aleatoria
     setTimeout(async () => {
-        const dueloActual = await Duelo.findById(dueloId);
-        // Si ya fue resuelto por tiro en falso (señuelo), no mostrar botón de disparo
-        if (!dueloActual || dueloActual.estado !== 'activo') return;
-
-        const embedDisparo = base(
-            '💥 ¡¡FUEGOOO!!',
-            `**<@${duelo.retadorId}>** vs **<@${duelo.rivalId}>**\n\n` +
-            `¡¡PRESIONA EL BOTÓN AHORA!!`,
-            COLORES.rojo
-        );
-
-        await mensaje.edit({
-            embeds: [embedDisparo],
-            components: [filaDispararDuelo(dueloId)],
-        }).catch(() => null);
-    }, delay);
+        await resolverDueloAleatorio(dueloId, canal);
+    }, 3500);
 }
 
-async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
-    // Bloqueo atómico del duelo para que solo el primer clic sea válido
+async function resolverDueloAleatorio(dueloId, canal) {
     const duelo = await Duelo.findOneAndUpdate(
         { _id: dueloId, estado: 'activo' },
         { estado: 'finalizado' },
         { new: true }
     );
-    if (!duelo) return; // Ya fue resuelto o expiró
-
-    // Verificar que quien disparó sea uno de los participantes
-    if (disparadorId !== duelo.retadorId && disparadorId !== duelo.rivalId) return;
+    if (!duelo) return;
 
     const pozoTotal = duelo.monto * 2;
-    let ganadorId;
-    let perdedorId;
-    let motivoVictoria;
-
-    if (esSenuelo) {
-        // Tiro en falso: gana el oponente
-        perdedorId = disparadorId;
-        ganadorId = disparadorId === duelo.retadorId ? duelo.rivalId : duelo.retadorId;
-        motivoVictoria = `¡<@${perdedorId}> se apresuró y disparó en falso antes de la señal!`;
-    } else {
-        // Disparo certero: gana el más rápido
-        ganadorId = disparadorId;
-        perdedorId = disparadorId === duelo.retadorId ? duelo.rivalId : duelo.retadorId;
-        motivoVictoria = `¡<@${ganadorId}> tuvo los reflejos de ultratumba más veloces!`;
-    }
+    // Tirada 100% aleatoria e imparcial (50% / 50%)
+    const retadorGana = Math.random() < 0.5;
+    const ganadorId = retadorGana ? duelo.retadorId : duelo.rivalId;
+    const perdedorId = retadorGana ? duelo.rivalId : duelo.retadorId;
+    const motivoVictoria = `¡El destino de ultratumba favoreció a <@${ganadorId}> en el combate a muerte!`;
 
     duelo.ganadorId = ganadorId;
 
-    // 🛡️ Detección agresiva de colusión / win-trading entre estos dos duelistas
+    // 🛡️ Detección preventiva de colusión / win-trading entre estos dos duelistas
     let esColusion = false;
     let motivoFraude = '';
 
@@ -293,24 +264,17 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
 
         const totalHuesosPasados = huesosGanadosPrevios + duelo.monto;
 
-        // 1. Si el perdedor ya le había perdido hoy al mismo usuario (patrón de derrotas consecutivas)
-        if (derrotasPreviasContraGanador >= 1) {
+        // Si el perdedor ya le había perdido 3 o más veces consecutivas hoy al mismo usuario
+        if (derrotasPreviasContraGanador >= 3) {
             esColusion = true;
             motivoFraude = `Derrotas consecutivas intencionales (${derrotasPreviasContraGanador + 1} duelos perdidos hacia el mismo ganador hoy)`;
-        }
-        // 2. Si se están transfiriendo un monto acumulado excesivo (>= 500 huesos)
-        else if (totalHuesosPasados >= 500 && duelosPrevios.length >= 1) {
+        } else if (totalHuesosPasados >= 800 && duelosPrevios.length >= 2) {
             esColusion = true;
             motivoFraude = `Traspaso excesivo y concentrado de capital (${totalHuesosPasados} huesos pasados hoy entre ambos)`;
         }
-        // 3. Si el perdedor presionó señuelo (disparo en falso) en duelo de alto monto o con duelos previos
-        else if (esSenuelo && (duelo.monto >= 200 || duelosPrevios.length >= 1)) {
-            esColusion = true;
-            motivoFraude = `Tiro en falso deliberado (señuelo) para ceder el pozo de ${duelo.monto} huesos`;
-        }
     }
 
-    const { logDuelo, guardarLogDueloDB, logAdmin } = require('./logger');
+    const { logDuelo, guardarLogDueloDB, logAdmin, logSospecha } = require('./logger');
 
     if (esColusion) {
         // 🚨 CASO DE FRAUDE: CONFISCACIÓN TOTAL DEL POZO Y SANCIONES DURAS
@@ -320,7 +284,6 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
         const factorSancion = config.DUELOS?.SANCTION_FACTOR || 0.20;
         const duracionSancionMs = config.DUELOS?.SANCTION_DURATION_MS || 2 * 60 * 60 * 1000;
 
-        // Sancionar al cedente (perdedor)
         await sancionarUsuario(
             perdedorId,
             duelo.guildId,
@@ -328,7 +291,6 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
             { factor: factorSancion, duracionMs: duracionSancionMs }
         );
 
-        // Sancionar al receptor ilícito (ganador)
         await sancionarUsuario(
             ganadorId,
             duelo.guildId,
@@ -336,7 +298,6 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
             { factor: factorSancion, duracionMs: duracionSancionMs }
         );
 
-        // Registrar en estadísticas sin entregar ganancias
         await Promise.all([
             Usuario.updateOne(
                 { userId: ganadorId, guildId: duelo.guildId },
@@ -360,12 +321,15 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
             detalle: `🚨 [COLUSIÓN DETECTADA] ${motivoFraude} • Pozo de ${pozoTotal} huesos confiscado`,
         }).catch(() => null);
 
-        await logAdmin(
-            duelo.guildId,
-            null,
-            '🚨 Duelo Anulado por Colusión',
-            `Se detectó colusión activa entre <@${perdedorId}> y <@${ganadorId}>.\n**Infracción:** ${motivoFraude}\n**Medida:** Pozo de ${pozoTotal} huesos CONFISCADO. Ambos usuarios recibieron multas y suspensión temporal.`
-        ).catch(() => null);
+        await logSospecha(duelo.guildId, perdedorId, {
+            tipo: 'Colusión en Duelos',
+            detalle: `Duelo intervenido por sospecha de traspaso de fondos entre <@${perdedorId}> y <@${ganadorId}> (${motivoFraude}).`,
+            nivel: 'critico',
+            campos: [
+                { name: '⚔️ Duelistas', value: `<@${perdedorId}> vs <@${ganadorId}>`, inline: true },
+                { name: '💰 Pozo Confiscado', value: `${pozoTotal} 🦴`, inline: true },
+            ],
+        });
 
         const mensaje = await canal.messages.fetch(duelo.mensajeId).catch(() => null);
         const embedFraude = base(
@@ -394,12 +358,12 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
     const corteCasa = Math.round(pozoTotal * (config.DUELOS?.CORTE_CASA || 0.05));
     const premio = pozoTotal - corteCasa;
 
-    await modificarHuesos(ganadorId, duelo.guildId, premio, 'apuesta', 'Victoria en Duelo');
+    await modificarHuesos(ganadorId, duelo.guildId, premio, 'duelo', 'Victoria en Duelo');
 
     duelo.premioEntregado = premio;
     await duelo.save();
 
-    // Guardar en BD (DuelLog) y emitir logs públicos y privados
+    // Guardar en BD (DuelLog) y emitir logs públicos y en canal dedicado de duelos
     try {
         await guardarLogDueloDB({
             guildId: duelo.guildId,
@@ -412,7 +376,7 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
             detalle: motivoVictoria,
         }).catch(() => null);
 
-        logDuelo(duelo.guildId, ganadorId, perdedorId, premio).catch(() => null);
+        logDuelo(duelo.guildId, ganadorId, perdedorId, premio, duelo.monto, motivoVictoria).catch(() => null);
     } catch {}
 
     // Actualizar estadísticas
@@ -434,7 +398,8 @@ async function resolverDisparo(dueloId, disparadorId, esSenuelo, canal) {
         `👑 **Ganador:** <@${ganadorId}>\n` +
         `💀 **Derrotado:** <@${perdedorId}>\n` +
         `💰 **Premio entregado:** **+${formatoNum(premio)}** huesos 🦴\n` +
-        `🏛️ _Comisión de la Cripta (5%): ${formatoNum(corteCasa)} huesos_\n\n` +
+        `🏛️ _Comisión de la Cripta (5%): ${formatoNum(corteCasa)} huesos_\n` +
+        `🎲 _Mecánica: Combate resuelto de forma 100% aleatoria e imparcial._\n\n` +
         `⏱️ _Este mensaje se eliminará automáticamente en 15 segundos y quedará registrado en los logs públicos._`,
         COLORES.verde
     );
@@ -451,6 +416,7 @@ module.exports = {
     crearDuelo,
     filaInvitacionDuelo,
     iniciarMinijuegoDuelo,
-    resolverDisparo,
+    resolverDueloAleatorio,
+    resolverDisparo: resolverDueloAleatorio,
     reembolsarDuelosPendientes,
 };
