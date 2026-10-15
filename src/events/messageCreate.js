@@ -54,6 +54,10 @@ module.exports = {
 
             let contenido = message.content?.trim() || '';
 
+            // ── 2.1. LECTOR DE CHAT DE VOZ (TTS) ──
+            const { procesarMensajeTTS } = require('../services/tts');
+            await procesarMensajeTTS(message, client);
+
             // Si el contenido está vacío pero recibimos el evento (Message Content Intent)
             if (!contenido) {
                 if (message.mentions.has(client.user)) {
