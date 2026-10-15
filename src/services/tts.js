@@ -217,12 +217,12 @@ function encolarTexto(guildId, textoOriginal, autorInfo = null, nombreOpcional =
     let autorNombre = null;
 
     if (typeof autorInfo === 'object' && autorInfo !== null) {
-        autorId = autorInfo.id || null;
-        autorNombre = autorInfo.displayName || autorInfo.username || autorInfo.name || null;
+        autorId = autorInfo.id || 'anonimo';
+        autorNombre = autorInfo.displayName || autorInfo.globalName || autorInfo.username || autorInfo.name || 'Usuario';
     } else if (typeof autorInfo === 'string') {
-        if (nombreOpcional && typeof nombreOpcional === 'string') {
+        if (typeof nombreOpcional === 'string' && nombreOpcional.trim()) {
             autorId = autorInfo;
-            autorNombre = nombreOpcional;
+            autorNombre = nombreOpcional.trim();
         } else {
             autorId = autorInfo;
             autorNombre = autorInfo;
@@ -233,10 +233,12 @@ function encolarTexto(guildId, textoOriginal, autorInfo = null, nombreOpcional =
         esSistema = nombreOpcional;
     }
 
+    const nombreLimpio = limpiarNombreParaVoz(autorNombre);
+
     sesion.cola.push({
         texto: textoLimpio,
-        autorId,
-        autorNombre: limpiarNombreParaVoz(autorNombre),
+        autorId: autorId || 'anonimo',
+        autorNombre: nombreLimpio || 'Usuario',
         esSistema: Boolean(esSistema),
         timestamp: Date.now(),
     });
@@ -273,7 +275,7 @@ async function procesarSiguienteEnCola(guildId) {
 
     let frase = '';
 
-    if (item.esSistema || !sesion.incluirNombre || !item.autorNombre) {
+    if (item.esSistema || !sesion.incluirNombre) {
         frase = item.texto;
         if (item.esSistema) {
             sesion.ultimoAutorId = null;
@@ -281,20 +283,20 @@ async function procesarSiguienteEnCola(guildId) {
     } else {
         const esMismoAutor = Boolean(sesion.ultimoAutorId && sesion.ultimoAutorId === item.autorId);
         const tiempoPasado = Date.now() - (sesion.ultimoTiempoMensaje || 0);
-        // Si la misma persona escribe de manera seguida sin interrupción de nadie más (dentro de 60s)
-        const esSeguido = esMismoAutor && tiempoPasado < 60000;
+        // Si la misma persona escribe de manera seguida en menos de 20 segundos sin interrupción de nadie más
+        const esSeguido = esMismoAutor && tiempoPasado < 20000;
 
         if (esSeguido) {
             frase = item.texto;
         } else {
-            frase = `${item.autorNombre} dice, ${item.texto}`;
+            frase = `${item.autorNombre} dice: ${item.texto}`;
         }
 
         sesion.ultimoAutorId = item.autorId;
         sesion.ultimoTiempoMensaje = Date.now();
     }
 
-    console.log(`[TTS] 🗣️ [${guildId}] Reproduciendo: "${frase}" (Autor: "${item.autorNombre || 'Sistema'}")`);
+    console.log(`[TTS] 🗣️ [${guildId}] Reproduciendo en voz: "${frase}" (Autor: "${item.autorNombre || 'Sistema'}")`);
 
     const node = nodoDisponible();
 
