@@ -435,6 +435,7 @@ async function logAdmin(guildId, adminId, accion, descripcion, campos = []) {
 
 module.exports = {
     setLogClient,
+    getLogClient: () => _client,
     enviarLogPublico,
     enviarLogAdmin,
     enviarLogCanalDedicado,

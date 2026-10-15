@@ -83,6 +83,15 @@ async function procesarApuestaPrevia(usuario, userId, guildId, monto) {
 // • 15 minutos sin jugar resetea la racha a cero.
 const estadosApuestas = new Map(); // userId -> { ultimoTiro, tirosSeguidos, cooldownActualMs, bloqueoHasta }
 
+// Limpieza periódica de estados inactivos para prevenir acumulación en memoria
+setInterval(() => {
+    const ahora = Date.now();
+    for (const [uid, est] of estadosApuestas.entries()) {
+        const expirado = (ahora - est.ultimoTiro > 2 * 60 * 60 * 1000) && (!est.bloqueoHasta || ahora >= est.bloqueoHasta);
+        if (expirado) estadosApuestas.delete(uid);
+    }
+}, 30 * 60 * 1000).unref();
+
 function consultarCooldown(userId) {
     const ahora = Date.now();
     const estado = estadosApuestas.get(userId);

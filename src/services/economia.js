@@ -52,7 +52,8 @@ async function modificarHuesos(userId, guildId, delta, tipo, detalle = '') {
             let tieneRolPermitido = false;
             if (!esAdminUser && (config.rolTesterId || (config.rolesAdminIds && config.rolesAdminIds.length > 0))) {
                 try {
-                    const { client } = require('../index');
+                    const { getLogClient } = require('./logger');
+                    const client = getLogClient() || require('../../index')?.client;
                     const guild = client?.guilds?.cache?.get(guildId);
                     const member = guild?.members?.cache?.get(userId);
                     if (member) {
