@@ -143,13 +143,7 @@ module.exports = {
 
                 const embed = basePremium(
                     '🗣️ Lector de Voz Activado',
-                    `El bot se ha unido a **${canalVoz.name}** y leerá en voz alta todo lo que escriban en el chat.\n\n` +
-                    `• 🎙️ **Canal de Voz:** <#${canalVoz.id}>\n` +
-                    `• 🌐 **Idioma / Acento:** \`${IDIOMAS_SOPORTADOS[idioma] || idioma}\`\n` +
-                    `• 👤 **Decir autor:** ✅ Activado ("Usuario dice: ...")\n` +
-                    `• ⚡ **Versión TTS:** \`v3.1 (Continuidad Estricta + Agrupación Rápida)\`\n` +
-                    `• ⏱️ **Auto-desconexión:** Se desconectará automáticamente si pasa 5 minutos sin actividad.\n\n` +
-                    `💡 *¡Solo escribe en este chat y el bot lo pronunciará en llamada! Para desconectarlo usa \`/tts desactivar\`.*`,
+                    `El bot se ha unido a **${canalVoz.name}** y leerá lo que escriban en este chat.`,
                     COLORES.verde
                 );
 
