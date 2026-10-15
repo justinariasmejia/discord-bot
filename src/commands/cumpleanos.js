@@ -2,6 +2,7 @@
 // Comando de usuario y administración para consultar, registrar y configurar el sistema de cumpleaños.
 const {
     SlashCommandBuilder,
+    ChannelType,
     MessageFlags,
 } = require('discord.js');
 const Cumpleanos = require('../models/Cumpleanos');
@@ -68,6 +69,18 @@ module.exports = {
                 .setName('rol_alertas')
                 .setDescription('Configura el rol que recibirá las menciones de avisos de cumpleaños')
                 .addRoleOption((opt) => opt.setName('rol').setDescription('Rol para las alertas').setRequired(true))
+        )
+        // ── Canal de Felicitaciones / Anuncios (Admin) ──
+        .addSubcommand((sub) =>
+            sub
+                .setName('canal_anuncios')
+                .setDescription('Configura el canal donde se enviarán las felicitaciones de cumpleaños con mención')
+                .addChannelOption((opt) =>
+                    opt.setName('canal')
+                        .setDescription('Canal de texto para felicitaciones')
+                        .setRequired(true)
+                        .addChannelTypes(ChannelType.GuildText)
+                )
         ),
 
     async ejecutar(interaction, client) {
@@ -243,6 +256,34 @@ module.exports = {
                 embeds: [basePremium(
                     '✅ Rol de Alertas de Cumpleaños Configurado',
                     `El rol <@&${rol.id}> recibirá una mención cada vez que sea el cumpleaños de un miembro para que la comunidad pueda felicitarlo.`,
+                    COLORES.verde
+                )],
+            });
+        }
+
+        // ── 7. Configurar Canal de Anuncios de Cumpleaños (Admin) ──
+        if (sub === 'canal_anuncios') {
+            const autorizado = await esAdminAsync(interaction.member, interaction.guildId);
+            if (!autorizado) {
+                return interaction.reply({
+                    content: '🔒 No tienes permisos para configurar el canal de anuncios de cumpleaños.',
+                    flags: MessageFlags.Ephemeral,
+                });
+            }
+
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const canal = interaction.options.getChannel('canal');
+
+            await ConfigEvento.findOneAndUpdate(
+                { guildId: interaction.guildId },
+                { $set: { canalAnunciosCumpleId: canal.id } },
+                { upsert: true }
+            );
+
+            return interaction.editReply({
+                embeds: [basePremium(
+                    '✅ Canal de Anuncios de Cumpleaños Configurado',
+                    `Las felicitaciones automáticas con mención al rol festivo se enviarán en ${canal}.`,
                     COLORES.verde
                 )],
             });

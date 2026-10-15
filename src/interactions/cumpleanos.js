@@ -128,6 +128,10 @@ module.exports = {
                 await actualizarPanelCumpleanos(interaction.client, interaction.guildId);
 
                 const prox = calcularProximidad(dia, mes);
+                if (prox.esHoy) {
+                    const { chequearCumpleanosDiarios } = require('../services/cumpleanos');
+                    chequearCumpleanosDiarios(interaction.client).catch(() => null);
+                }
                 const nombreMes = MESES_NOMBRES[mes - 1];
                 let detalleProximo = '';
                 if (prox.esHoy) detalleProximo = '🎉 **¡Hoy es tu cumpleaños! ¡Muchas felicidades!**';

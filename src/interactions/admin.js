@@ -213,6 +213,217 @@ module.exports = {
             return interaction.editReply({ embeds: [basePremium('🔓 Sanción Levantada / Indulto', desc, COLORES.verde)] });
         }
 
+        // ── 0.1. GESTIÓN DE CUMPLEAÑOS DESDE EL PANEL DE ADMINISTRACIÓN ──
+        if (accion === 'panel_cumple_cambiar') {
+            const fila = new ActionRowBuilder().addComponents(
+                new UserSelectMenuBuilder()
+                    .setCustomId(`admin:sel_user_cumple_cambiar:${interaction.user.id}`)
+                    .setPlaceholder('🎂 Selecciona al usuario para cambiar o fijar su cumpleaños...')
+            );
+            return interaction.reply({
+                content: 'Selecciona al usuario cuyo cumpleaños deseas registrar o modificar:',
+                components: [fila],
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
+        if (accion === 'sel_user_cumple_cambiar') {
+            const targetId = interaction.values[0];
+            const targetUser = await client.users.fetch(targetId).catch(() => null);
+
+            const modal = new ModalBuilder()
+                .setCustomId(`admin:modal_cumple_cambiar:${interaction.user.id}:${targetId}`)
+                .setTitle(`🎂 Cumpleaños de ${(targetUser?.username || 'Usuario').slice(0, 20)}`);
+
+            const inputDia = new TextInputBuilder()
+                .setCustomId('dia')
+                .setLabel('Día de Nacimiento (1 al 31)')
+                .setPlaceholder('Ej: 14')
+                .setStyle(TextInputStyle.Short)
+                .setMinLength(1)
+                .setMaxLength(2)
+                .setRequired(true);
+
+            const inputMes = new TextInputBuilder()
+                .setCustomId('mes')
+                .setLabel('Mes de Nacimiento (1 al 12 o Nombre)')
+                .setPlaceholder('Ej: 10 o Octubre')
+                .setStyle(TextInputStyle.Short)
+                .setMinLength(1)
+                .setMaxLength(12)
+                .setRequired(true);
+
+            const inputAnio = new TextInputBuilder()
+                .setCustomId('anio')
+                .setLabel('Año de Nacimiento (Opcional)')
+                .setPlaceholder('Ej: 2000 (Puedes dejarlo en blanco)')
+                .setStyle(TextInputStyle.Short)
+                .setMinLength(4)
+                .setMaxLength(4)
+                .setRequired(false);
+
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(inputDia),
+                new ActionRowBuilder().addComponents(inputMes),
+                new ActionRowBuilder().addComponents(inputAnio)
+            );
+            return interaction.showModal(modal);
+        }
+
+        if (accion === 'modal_cumple_cambiar') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const targetId = extra;
+            const diaStr = interaction.fields.getTextInputValue('dia');
+            const mesStr = interaction.fields.getTextInputValue('mes');
+            const anioStr = interaction.fields.getTextInputValue('anio') || '';
+
+            const { parsearMes, registrarCumpleanos, actualizarPanelCumpleanos, calcularProximidad, chequearCumpleanosDiarios, MESES_NOMBRES } = require('../services/cumpleanos');
+
+            const dia = parseInt(diaStr.trim(), 10);
+            const mes = parsearMes(mesStr);
+            let anio = null;
+
+            if (anioStr.trim()) {
+                anio = parseInt(anioStr.trim(), 10);
+                const anioActual = new Date().getFullYear();
+                if (isNaN(anio) || anio < 1920 || anio > anioActual) {
+                    return interaction.editReply({ content: `❌ El año ingresado no es válido. Debe ser un año entre 1920 y ${anioActual}.` });
+                }
+            }
+
+            if (isNaN(dia) || dia < 1 || dia > 31) {
+                return interaction.editReply({ content: '❌ El día ingresado no es válido. Debe ser un número del 1 al 31.' });
+            }
+
+            if (!mes) {
+                return interaction.editReply({ content: '❌ El mes ingresado no es válido. Ingresa un número del 1 al 12 o el nombre del mes.' });
+            }
+
+            try {
+                await registrarCumpleanos(guildId, targetId, dia, mes, anio);
+                await actualizarPanelCumpleanos(client, guildId);
+
+                const prox = calcularProximidad(dia, mes);
+                if (prox.esHoy) {
+                    chequearCumpleanosDiarios(client).catch(() => null);
+                }
+
+                await logAdmin(guildId, interaction.user.id, 'Cumpleaños Modificado', `Admin fijó fecha de <@${targetId}>: **${dia} de ${MESES_NOMBRES[mes - 1]}**${anio ? ` (${anio})` : ''}`);
+                solicitarActualizacionAdminPanel(guildId);
+
+                const nombreMes = MESES_NOMBRES[mes - 1];
+                return interaction.editReply({
+                    embeds: [basePremium(
+                        '🎂 Cumpleaños Actualizado con Éxito',
+                        `Se ha registrado la fecha para <@${targetId}>:\n\n` +
+                        `📅 **Fecha:** **${dia} de ${nombreMes}**${anio ? ` (${anio})` : ''}\n` +
+                        `⏱️ **Estado:** ${prox.esHoy ? '🎉 **¡ES HOY!**' : `Faltan **${prox.diasFaltantes} días**`}\n\n` +
+                        `✨ *El panel permanente de los 10 cumpleaños más cercanos ha sido actualizado en vivo.*`,
+                        COLORES.verde
+                    )],
+                });
+            } catch (err) {
+                return interaction.editReply({ content: `❌ Error al guardar cumpleaños: ${err.message}` });
+            }
+        }
+
+        if (accion === 'panel_cumple_eliminar') {
+            const fila = new ActionRowBuilder().addComponents(
+                new UserSelectMenuBuilder()
+                    .setCustomId(`admin:sel_user_cumple_eliminar:${interaction.user.id}`)
+                    .setPlaceholder('🗑️ Selecciona al usuario cuyo cumpleaños deseas eliminar...')
+            );
+            return interaction.reply({
+                content: 'Selecciona al usuario al que deseas borrar su fecha de cumpleaños:',
+                components: [fila],
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
+        if (accion === 'sel_user_cumple_eliminar') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const targetId = interaction.values[0];
+            const { borrarCumpleanos, actualizarPanelCumpleanos } = require('../services/cumpleanos');
+
+            const borrado = await borrarCumpleanos(guildId, targetId);
+            if (!borrado) {
+                return interaction.editReply({
+                    content: `ℹ️ El usuario <@${targetId}> no tenía ninguna fecha de cumpleaños registrada.`,
+                });
+            }
+
+            await actualizarPanelCumpleanos(client, guildId);
+            await logAdmin(guildId, interaction.user.id, 'Cumpleaños Eliminado', `Admin eliminó el registro de cumpleaños de <@${targetId}>.`);
+            solicitarActualizacionAdminPanel(guildId);
+
+            return interaction.editReply({
+                embeds: [basePremium(
+                    '🗑️ Cumpleaños Eliminado',
+                    `Se ha eliminado el cumpleaños de <@${targetId}> del sistema y el panel de los 10 más cercanos ha sido actualizado.`,
+                    COLORES.rojo
+                )],
+            });
+        }
+
+        if (accion === 'panel_cumple_ver') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const { obtenerProximosCumpleanos, MESES_NOMBRES } = require('../services/cumpleanos');
+            const proximos = await obtenerProximosCumpleanos(guildId, 10);
+            const Cumpleanos = require('../models/Cumpleanos');
+            const total = await Cumpleanos.countDocuments({ guildId });
+
+            if (proximos.length === 0) {
+                return interaction.editReply({
+                    embeds: [basePremium('🎂 Sin Cumpleaños Registrados', 'No hay ningún cumpleaños registrado en la base de datos de este servidor.', COLORES.morado)],
+                });
+            }
+
+            let desc = `### 🎈 Cumpleaños Registrados (${total} en total)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            proximos.forEach((c, i) => {
+                const nombreMes = MESES_NOMBRES[c.mes - 1];
+                let estado = c.esHoy ? ' 🎉 **¡ES HOY!**' : (c.esManana ? ' ⏰ *(¡Mañana!)*' : ` *(en ${c.diasFaltantes} días)*`);
+                const edadStr = c.anio ? ` • \`${new Date().getFullYear() - c.anio} años\`` : '';
+                desc += `**#${i + 1}** <@${c.userId}> — **${c.dia} de ${nombreMes}**${edadStr}${estado}\n`;
+            });
+            desc += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+
+            return interaction.editReply({
+                embeds: [basePremium('🎂 Consulta de Cumpleaños • Administración', desc, '#9b59b6')],
+            });
+        }
+
+        if (accion === 'panel_cumple_canal_anuncios') {
+            const selectCanal = new ChannelSelectMenuBuilder()
+                .setCustomId(`admin:sel_canal_anuncios_cumple:${interaction.user.id}`)
+                .setPlaceholder('📢 Selecciona el canal donde se enviarán las felicitaciones...')
+                .addChannelTypes(ChannelType.GuildText);
+
+            return interaction.reply({
+                content: 'Selecciona el canal de texto para los anuncios y felicitaciones automáticas de cumpleaños (por defecto <#1332507353454743674>):',
+                components: [new ActionRowBuilder().addComponents(selectCanal)],
+                flags: MessageFlags.Ephemeral,
+            });
+        }
+
+        if (accion === 'sel_canal_anuncios_cumple') {
+            await interaction.deferUpdate();
+            const canalId = interaction.values[0];
+
+            await ConfigEvento.findOneAndUpdate(
+                { guildId },
+                { $set: { canalAnunciosCumpleId: canalId } },
+                { upsert: true, new: true }
+            );
+
+            await logAdmin(guildId, interaction.user.id, 'Canal Anuncios Cumpleaños', `Canal asignado a <#${canalId}>`);
+            solicitarActualizacionAdminPanel(guildId);
+
+            return interaction.editReply({
+                content: `✅ ¡Canal de felicitaciones configurado con éxito! Las alertas y felicitaciones con mención al rol se enviarán a <#${canalId}>.`,
+                components: [],
+            });
+        }
+
         // ── 1. Respaldo Manual desde Botón ──
         if (accion === 'panel_backup') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -888,6 +1099,8 @@ module.exports = {
                     { label: '🛡️ Canal de Logs de Admins', value: 'canalLogsId', description: 'Auditoría privada de seguridad' },
                     { label: '🎃 Canal de Eventos Comunitarios', value: 'canalEventosId', description: 'Fantasmas, trivias y cofres' },
                     { label: '🎵 Canal de Música Dedicado', value: 'canalMusicaId', description: 'Reproductor táctil permanente' },
+                    { label: '🎂 Canal Panel Cumpleaños (Fijo)', value: 'canalCumpleanosId', description: 'Canal permanente del top 10 cumpleaños más cercanos' },
+                    { label: '🎉 Canal Felicitaciones Cumpleaños', value: 'canalAnunciosCumpleId', description: 'Canal de avisos y felicitaciones automáticas con rol' },
                     { label: '📦 Bóveda de Stickers', value: 'canalStickersId', description: 'Archivador de stickers robados' },
                     { label: '🔬 Canal de Pruebas / Mantenimiento', value: 'canalTestId', description: 'Apariciones aisladas de prueba' },
                 ]);
@@ -929,6 +1142,9 @@ module.exports = {
                 await configurarCanalMusica(guildId, canalId, client);
             } else if (tipoCanal === 'canalAdminPanelId') {
                 await configurarCanalAdminPanel(guildId, canalId, client);
+            } else if (tipoCanal === 'canalCumpleanosId') {
+                const { configurarCanalCumpleanos } = require('../services/cumpleanos');
+                await configurarCanalCumpleanos(guildId, canalId, client);
             }
 
             solicitarActualizacionAdminPanel(guildId);

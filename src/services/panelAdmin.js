@@ -51,6 +51,9 @@ async function construirPanelAdmin(guildId) {
     desc += `🚨 **Canal Sanciones:** ${formatCanal(config.canalSancionesId)}\n`;
     desc += `🎃 **Eventos Comunitarios:** ${formatCanal(config.canalEventosId)}\n`;
     desc += `🎵 **Reproductor Música:** ${formatCanal(config.canalMusicaId)}\n`;
+    desc += `🎂 **Panel Cumpleaños:** ${formatCanal(config.canalCumpleanosId)}\n`;
+    desc += `🎉 **Canal Felicitaciones:** ${formatCanal(config.canalAnunciosCumpleId || '1332507353454743674')}\n`;
+    desc += `🎈 **Rol Cumpleaños:** ${config.rolCumpleanosId ? `<@&${config.rolCumpleanosId}>` : '_Ninguno_'}\n`;
     const rolesList = (config.rolesAdminIds && config.rolesAdminIds.length > 0)
         ? config.rolesAdminIds.map(id => `<@&${id}>`).join(', ')
         : '🔒 *Solo Administradores nativos*';
@@ -191,7 +194,31 @@ async function construirPanelAdmin(guildId) {
             .setStyle(ButtonStyle.Success)
     );
 
-    return { embeds: [embed], components: [fila1, fila2, fila3, fila4] };
+    // Fila 5: Gestión de Cumpleaños
+    const fila5 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('admin:panel_cumple_cambiar:admin')
+            .setLabel('Cambiar Cumpleaños')
+            .setEmoji('🎂')
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId('admin:panel_cumple_eliminar:admin')
+            .setLabel('Eliminar Cumpleaños')
+            .setEmoji('🗑️')
+            .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+            .setCustomId('admin:panel_cumple_ver:admin')
+            .setLabel('Ver Cumpleaños')
+            .setEmoji('📋')
+            .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setCustomId('admin:panel_cumple_canal_anuncios:admin')
+            .setLabel('Canal Felicitaciones')
+            .setEmoji('📢')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    return { embeds: [embed], components: [fila1, fila2, fila3, fila4, fila5] };
 }
 
 /**

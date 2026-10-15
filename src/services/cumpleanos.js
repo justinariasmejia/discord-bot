@@ -20,8 +20,28 @@ const MEDALLAS = ['👑', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️
 const canalesCumpleanosCache = new Map(); // guildId -> { canalId, mensajeId }
 let _client = null;
 
-function setClientCumpleanos(client) {
-    _client = client;
+function parsearMes(mesInput) {
+    if (!mesInput) return null;
+    const limpio = String(mesInput).trim().toLowerCase();
+    const num = parseInt(limpio, 10);
+    if (!isNaN(num) && num >= 1 && num <= 12) return num;
+
+    const indices = {
+        ene: 1, enero: 1,
+        feb: 2, febrero: 2,
+        mar: 3, marzo: 3,
+        abr: 4, abril: 4,
+        may: 5, mayo: 5,
+        jun: 6, junio: 6,
+        jul: 7, julio: 7,
+        ago: 8, agosto: 8,
+        sep: 9, sept: 9, septiembre: 9, setiembre: 9,
+        oct: 10, octubre: 10,
+        nov: 11, noviembre: 11,
+        dic: 12, diciembre: 12,
+    };
+
+    return indices[limpio] || null;
 }
 
 /**
@@ -159,7 +179,7 @@ async function construirPanelCumpleanos(guildId) {
     const fila = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('cumple:modal_abrir:todos')
-            .setLabel('Registrar mi Cumpleaños')
+            .setLabel('Registrar / Cambiar Fecha')
             .setEmoji('🎂')
             .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
@@ -233,7 +253,7 @@ async function actualizarPanelCumpleanos(client, guildId) {
         try {
             const recientes = await canal.messages.fetch({ limit: 15 }).catch(() => null);
             if (recientes) {
-                const sobrantes = recientes.filter(m => m.id !== config.mensajeId);
+                const sobrantes = recientes.filter(m => m.id !== config.mensajeId && !m.content?.includes('🎂') && !m.content?.includes('cumpleaños'));
                 if (sobrantes.size > 0) {
                     await canal.bulkDelete(sobrantes).catch(() => {});
                 }
@@ -344,8 +364,9 @@ async function chequearCumpleanosDiarios(client) {
                         await member.roles.add(rolCumple.id).catch(() => null);
                     }
 
-                    // Enviar anuncio festivo al canal de cumpleaños
-                    const canal = guild.channels.cache.get(conf.canalCumpleanosId) || await guild.channels.fetch(conf.canalCumpleanosId).catch(() => null);
+                    // Enviar anuncio festivo al canal de anuncios de cumpleaños (1332507353454743674)
+                    const canalAnunciosId = conf.canalAnunciosCumpleId || '1332507353454743674' || conf.canalCumpleanosId;
+                    const canal = guild.channels.cache.get(canalAnunciosId) || await guild.channels.fetch(canalAnunciosId).catch(() => null);
                     if (canal && canal.isTextBased()) {
                         const embedFestejo = basePremium(
                             '🎉 ¡HOY ES UN DÍA ESPECIAL! ¡FELIZ CUMPLEAÑOS! 🎂',
@@ -355,12 +376,13 @@ async function chequearCumpleanosDiarios(client) {
                             '#f1c40f'
                         );
 
-                        const avisoRol = conf.rolNotificacionesCumpleId ? `🔔 <@&${conf.rolNotificacionesCumpleId}> ` : '';
+                        const mencionRol = rolCumple ? `<@&${rolCumple.id}> ` : '';
+                        const avisoRol = conf.rolNotificacionesCumpleId ? `<@&${conf.rolNotificacionesCumpleId}> ` : '';
                         await canal.send({
-                            content: `${avisoRol}🎊 ¡Atención a todos! ¡Hoy es el cumpleaños de <@${c.userId}>! 🎂🎈`,
+                            content: `🎊 ¡Atención a todos! ${mencionRol}${avisoRol}¡Hoy es el cumpleaños de <@${c.userId}>! 🎂🎈`,
                             embeds: [embedFestejo],
                             allowedMentions: { parse: ['roles', 'users'] },
-                        }).catch(() => null);
+                        }).catch((err) => console.error('Error enviando anuncio de cumpleaños:', err?.message || err));
                     }
 
                     c.ultimoFestejadoAnio = anioActual;
@@ -400,7 +422,8 @@ setInterval(() => {
 
 module.exports = {
     MESES_NOMBRES,
-    setClientCumpleanos,
+    parsearMes,
+    setClientCumpleanos: (client) => { _client = client; },
     calcularProximidad,
     obtenerProximosCumpleanos,
     registrarCumpleanos,
