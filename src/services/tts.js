@@ -80,12 +80,22 @@ async function activarTTS({ guildId, canalVozId, canalTextoId, idioma = 'es', in
     // Si ya había una sesión previa, limpiar timeouts y reconectar
     desactivarTTS(guildId);
 
-    // Conectar el reproductor al canal de voz
+    if (shoukaku.connections.has(guildId)) {
+        try {
+            await shoukaku.leaveVoiceChannel(guildId);
+        } catch {}
+    }
+
+    const guild = client?.guilds?.cache?.get(guildId);
+    const shardId = guild?.shardId ?? 0;
+
+    // Conectar el reproductor al canal de voz asegurando usar el nodo activo
     const player = await shoukaku.joinVoiceChannel({
         guildId,
         channelId: canalVozId,
-        shardId: 0,
+        shardId,
         deaf: true,
+        nodeId: node.name,
     });
 
     const sesion = {
@@ -130,7 +140,9 @@ async function activarTTS({ guildId, canalVozId, canalTextoId, idioma = 'es', in
     sesionesTTS.set(guildId, sesion);
 
     // Saludo inicial breve para confirmar que el bot está activo en llamada
-    encolarTexto(guildId, 'Lector de voz activado.', null, true);
+    setTimeout(() => {
+        encolarTexto(guildId, 'Lector de voz activado.', null, true);
+    }, 400);
 
     return sesion;
 }

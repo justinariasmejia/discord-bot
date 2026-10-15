@@ -18,16 +18,16 @@ function inicializarShoukaku(client) {
 
     const nodos = [
         {
-            name: 'ZeroMusic-Backup',
-            url: 'lavalinkv4.serenetia.com:443',
-            auth: 'https://seretia.link/discord',
-            secure: true,
-        },
-        {
             name: 'ZeroMusic-Visihost',
             url: host,
             auth: auth,
             secure: secure,
+        },
+        {
+            name: 'ZeroMusic-Backup',
+            url: 'lavalinkv4.serenetia.com:443',
+            auth: 'https://seretia.link/discord',
+            secure: true,
         },
     ];
 
@@ -40,8 +40,8 @@ function inicializarShoukaku(client) {
             restTimeout: 10000,
             nodeResolver: (nodes) => {
                 const list = [...nodes.values()].filter((n) => n.state === 1);
-                const backup = list.find((n) => n.name === 'ZeroMusic-Backup');
-                if (backup) return backup;
+                const primary = list.find((n) => n.name === 'ZeroMusic-Visihost');
+                if (primary) return primary;
                 return list.sort((a, b) => a.penalties - b.penalties)[0];
             },
         });
@@ -77,6 +77,10 @@ function getShoukaku() {
 function nodoDisponible() {
     if (!_shoukaku) return null;
     try {
+        const nodes = [..._shoukaku.nodes.values()].filter((n) => n.state === 1);
+        if (nodes.length === 0) return null;
+        const visihost = nodes.find((n) => n.name === 'ZeroMusic-Visihost');
+        if (visihost) return visihost;
         return _shoukaku.getIdealNode();
     } catch {
         return null;
@@ -221,6 +225,7 @@ async function conectar(guildId, canalVozId, canalTextoId, shardId = 0) {
         channelId: canalVozId,
         shardId,
         deaf: true,
+        nodeId: node.name,
     });
 
     const cola = crearCola(guildId, player, canalTextoId, canalVozId);
